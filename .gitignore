@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# CodeBuddy 本地工作目录（记忆/会话数据，不进版本库；文件仍保留在本地磁盘）
+.codebuddy/
