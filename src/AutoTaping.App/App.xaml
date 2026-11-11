@@ -1,0 +1,21 @@
+﻿<!--
+    职责：应用程序入口 XAML，只做全局资源字典合并与关闭模式设定（无 StartupUri，窗口由 App.xaml.cs 从 DI 解析）
+    层：App
+    依赖：Resources/Colors.xaml、Resources/Styles.xaml
+    说明：ShutdownMode=OnExplicitShutdown —— 登录框与主窗口交替出现，不能因"最后一个窗口关闭"而提前退出，
+          退出时机统一由 App.xaml.cs 显式 Shutdown 控制（登录取消 / 主窗口关闭）
+-->
+<Application x:Class="AutoTaping.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- 顺序不可调换：Styles.xaml 引用了 Colors.xaml 中的画刷 -->
+                <ResourceDictionary Source="Resources/Colors.xaml" />
+                <ResourceDictionary Source="Resources/Styles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

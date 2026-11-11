@@ -1,0 +1,162 @@
+<!--
+    职责：报警页——当前未确认报警（确认 / 全部确认 / 静音）、历史查询（起止日期 + 导出 CSV）
+    层：App/Views/Pages
+    依赖：Resources/Colors.xaml、Resources/Styles.xaml、Converters、AlarmViewModel
+-->
+<UserControl x:Class="AutoTaping.App.Views.Pages.AlarmPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:AutoTaping.App.Converters"
+             Background="{StaticResource BgMain}">
+
+    <UserControl.Resources>
+        <converters:AlarmLevelToBrushConverter x:Key="AlarmLevelToBrush" />
+        <converters:AlarmLevelToTextConverter x:Key="AlarmLevelToText" />
+    </UserControl.Resources>
+
+    <Grid Margin="{StaticResource SpacingLarge}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="300" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ==================== 当前未确认报警 ==================== -->
+        <Border Grid.Row="0" Style="{StaticResource PanelBorder}" Padding="12" Margin="0,0,0,12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding ActiveCountText}"
+                               Style="{StaticResource GroupTitleText}"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Content="全部确认" Style="{StaticResource SmallButton}"
+                            Command="{Binding AckAllCommand}"
+                            IsEnabled="{Binding CanAckAll}"
+                            Margin="16,0,8,0" />
+                    <Button Grid.Column="2" Content="{Binding MuteButtonText}" Style="{StaticResource SmallButton}"
+                            Command="{Binding ToggleMuteCommand}" />
+                    <TextBlock Grid.Column="3"
+                               Text="同一报警 5 秒内重复触发只记 1 条（09 文档第三节）"
+                               Style="{StaticResource HintText}"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Right" />
+                </Grid>
+
+                <DataGrid Grid.Row="1"
+                          Style="{StaticResource DataGridStyle}"
+                          ItemsSource="{Binding ActiveAlarms}"
+                          RowHeight="56">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="时间" Width="110" Binding="{Binding StartTime, StringFormat=HH:mm:ss}"
+                                            FontFamily="{StaticResource FontFamilyNumeric}" />
+                        <DataGridTextColumn Header="代码" Width="100" Binding="{Binding Code}"
+                                            FontFamily="{StaticResource FontFamilyNumeric}" />
+                        <DataGridTextColumn Header="内容" Width="*" Binding="{Binding Message}" />
+                        <DataGridTextColumn Header="等级" Width="90"
+                                            Binding="{Binding Level, Converter={StaticResource AlarmLevelToText}}">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground"
+                                            Value="{Binding Level, Converter={StaticResource AlarmLevelToBrush}}" />
+                                    <Setter Property="FontWeight" Value="Bold" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="来源" Width="120" Binding="{Binding Source}" />
+                        <DataGridTemplateColumn Header="操作" Width="120">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Content="确 认"
+                                            Style="{StaticResource SmallButton}"
+                                            Command="{Binding DataContext.AckCommand,
+                                                      RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <!-- ==================== 历史报警 ==================== -->
+        <Border Grid.Row="1" Style="{StaticResource PanelBorder}" Padding="12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="历史报警" Style="{StaticResource GroupTitleText}"
+                               VerticalAlignment="Center" Margin="0,0,16,0" />
+                    <TextBlock Grid.Column="1" Text="起" Style="{StaticResource StatusLabelText}"
+                               VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBox Grid.Column="2" Width="130" Text="{Binding FromDateText, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource NumericInputBox}" Margin="0,0,16,0" />
+                    <TextBlock Grid.Column="3" Text="止" Style="{StaticResource StatusLabelText}"
+                               VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBox Grid.Column="4" Width="130" Text="{Binding ToDateText, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource NumericInputBox}" Margin="0,0,16,0" />
+                    <StackPanel Grid.Column="5" Orientation="Horizontal">
+                        <Button Content="查 询" Style="{StaticResource SmallButton}"
+                                Command="{Binding QueryHistoryCommand}" Margin="0,0,8,0" />
+                        <Button Content="导出CSV" Style="{StaticResource SmallButton}"
+                                Command="{Binding ExportCommand}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="6" Text="日期格式 yyyy-MM-dd，最大 90 天"
+                               Style="{StaticResource HintText}"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Right" />
+                </Grid>
+
+                <DataGrid Grid.Row="1"
+                          Style="{StaticResource DataGridStyle}"
+                          ItemsSource="{Binding HistoryAlarms}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="时间" Width="190"
+                                            Binding="{Binding StartTime, StringFormat=yyyy-MM-dd HH:mm:ss}"
+                                            FontFamily="{StaticResource FontFamilyNumeric}" />
+                        <DataGridTextColumn Header="代码" Width="100" Binding="{Binding Code}"
+                                            FontFamily="{StaticResource FontFamilyNumeric}" />
+                        <DataGridTextColumn Header="内容" Width="*" Binding="{Binding Message}" />
+                        <DataGridTextColumn Header="等级" Width="80"
+                                            Binding="{Binding Level, Converter={StaticResource AlarmLevelToText}}" />
+                        <DataGridTextColumn Header="确认人" Width="110" Binding="{Binding AckUser}" />
+                        <DataGridTextColumn Header="恢复时间" Width="190"
+                                            Binding="{Binding EndTime, StringFormat=yyyy-MM-dd HH:mm:ss}"
+                                            FontFamily="{StaticResource FontFamilyNumeric}" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <!-- ==================== 状态提示 ==================== -->
+        <TextBlock Grid.Row="2"
+                   Text="{Binding StatusText}"
+                   Style="{StaticResource HintText}"
+                   Margin="0,8,0,0" />
+    </Grid>
+</UserControl>

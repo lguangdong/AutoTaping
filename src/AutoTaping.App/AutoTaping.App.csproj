@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- 版本号与主窗口标题一致：v1.0.0（见 11-开发任务分解 S0 验收标准 2） -->
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MVVM：README 第 3 节锁定的轻量框架（Source Generator，不引入重框架） -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
+    <PackageReference Include="Serilog" Version="3.1.1" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AutoTaping.Core\AutoTaping.Core.csproj" />
+    <ProjectReference Include="..\AutoTaping.Hardware\AutoTaping.Hardware.csproj" />
+    <ProjectReference Include="..\AutoTaping.Vision\AutoTaping.Vision.csproj" />
+    <ProjectReference Include="..\AutoTaping.Data\AutoTaping.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 配置文件必须随可执行文件一起输出，否则启动时读不到（LogPath / 轴参数 / IO 映射都来自这里） -->
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

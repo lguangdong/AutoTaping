@@ -1,0 +1,74 @@
+<!--
+    职责：用户编辑对话框——新增用户 / 改角色 / 改密（08-页面清单 页面 8 用户管理）
+    层：App/Views/Dialogs
+    依赖：Resources/Colors.xaml、Resources/Styles.xaml
+    说明：只收集输入（登录名、角色、口令），格式与业务校验由 Core 的 UserManagementService 负责
+-->
+<Window x:Class="AutoTaping.App.Views.Dialogs.UserEditDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="用户"
+        Width="{StaticResource LoginDialogWidth}"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{StaticResource BgMain}"
+        Foreground="{StaticResource TextPrimary}"
+        FocusManager.FocusedElement="{Binding ElementName=UserNameInput}">
+
+    <Grid Margin="{StaticResource SpacingLarge}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="用户名" Style="{StaticResource StatusLabelText}" />
+            <TextBox x:Name="UserNameInput"
+                     Margin="0,8,0,0"
+                     AutomationProperties.AutomationId="UserNameInput" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Margin="0,16,0,0">
+            <TextBlock Text="角色" Style="{StaticResource StatusLabelText}" />
+            <ComboBox x:Name="RoleCombo"
+                      Margin="0,8,0,0"
+                      AutomationProperties.AutomationId="RoleCombo" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Margin="0,16,0,0">
+            <TextBlock x:Name="PasswordLabel" Text="口令" Style="{StaticResource StatusLabelText}" />
+            <!-- PasswordBox.Password 不是依赖属性，无法绑定；由 code-behind 读取 -->
+            <PasswordBox x:Name="PasswordInput"
+                         Margin="0,8,0,0"
+                         AutomationProperties.AutomationId="PasswordInput" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="3" Margin="0,16,0,0">
+            <TextBlock Text="确认口令" Style="{StaticResource StatusLabelText}" />
+            <PasswordBox x:Name="ConfirmPasswordInput"
+                         Margin="0,8,0,0"
+                         AutomationProperties.AutomationId="ConfirmPasswordInput" />
+        </StackPanel>
+
+        <TextBlock x:Name="ErrorText"
+                   Grid.Row="4"
+                   Foreground="{StaticResource StatusAlarm}"
+                   MinHeight="28"
+                   Margin="0,16,0,0"
+                   TextWrapping="Wrap" />
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="取 消" Style="{StaticResource NormalButton}" IsCancel="True" Margin="0,0,16,0" />
+            <Button Content="确 定"
+                    Style="{StaticResource PrimaryButton}"
+                    IsDefault="True"
+                    Click="OnConfirmClick" />
+        </StackPanel>
+    </Grid>
+</Window>

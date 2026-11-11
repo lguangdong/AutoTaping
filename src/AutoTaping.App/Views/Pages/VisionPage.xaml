@@ -1,0 +1,324 @@
+<!--
+    职责：视觉标定页——实时预览（叠加 MARK 十字与 ROI 框）+ 识别结果 + 九点标定向导 + 模板制作
+    层：App/Views/Pages
+    依赖：Resources/Colors.xaml、Resources/Styles.xaml、VisionViewModel
+    说明：布局按 08-页面清单 页面 4；颜色/字号/尺寸全部引用资源字典，禁止字面值；
+          预览图用 Viewbox + Canvas 叠加，叠加坐标用图像像素坐标（Viewbox 自动缩放）
+-->
+<UserControl x:Class="AutoTaping.App.Views.Pages.VisionPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BgMain}">
+    <Grid Margin="{StaticResource SpacingMedium}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="{Binding Title}" Style="{StaticResource PageTitleText}" />
+
+        <TabControl Grid.Row="1" Margin="0,16,0,0"
+                    Background="{StaticResource BgMain}"
+                    BorderBrush="{StaticResource BorderNormal}">
+            <!-- ==================== Tab 1：实时预览 ==================== -->
+            <TabItem Header="实时预览">
+                <Grid Margin="{StaticResource SpacingMedium}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 相机设置栏 -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,24,0">
+                            <Ellipse Width="{StaticResource StatusLampSize}"
+                                     Height="{StaticResource StatusLampSize}"
+                                     VerticalAlignment="Center">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="{StaticResource StatusIdle}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCameraConnected}" Value="True">
+                                                <Setter Property="Fill" Value="{StaticResource StatusRun}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                            <TextBlock Text="相机"
+                                       Style="{StaticResource StatusLabelText}" />
+                            <TextBlock Text="{Binding CameraStatusText}"
+                                       Style="{StaticResource StatusValueText}" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" Text="曝光" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="2" Style="{StaticResource NumericInputBox}" Width="96"
+                                 Text="{Binding Exposure, UpdateSourceTrigger=PropertyChanged}" Margin="8,0,16,0" />
+                        <TextBlock Grid.Column="3" Text="μs  增益" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="4" Style="{StaticResource NumericInputBox}" Width="80"
+                                 Text="{Binding Gain, UpdateSourceTrigger=PropertyChanged}" Margin="8,0,16,0" />
+                        <TextBlock Grid.Column="4" Text="dB" Style="{StaticResource UnitText}" VerticalAlignment="Center"
+                                   Margin="80,0,0,0" HorizontalAlignment="Left" />
+                        <Button Grid.Column="5" Content="应用"
+                                Style="{StaticResource SmallButton}"
+                                HorizontalAlignment="Left"
+                                Command="{Binding ApplyCameraSettingsCommand}" />
+                    </Grid>
+
+                    <!-- 预览图 + 识别结果 -->
+                    <Grid Grid.Row="1" Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="340" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 左：图像显示（Viewbox 自动缩放，Canvas 叠加 MARK 与 ROI） -->
+                        <Border Grid.Column="0" Style="{StaticResource PanelBorder}" Padding="8" Margin="0,0,16,0">
+                            <Viewbox Stretch="Uniform">
+                                <Grid Width="{Binding PreviewWidth}" Height="{Binding PreviewHeight}">
+                                    <Image Source="{Binding PreviewImage}" Stretch="Fill" />
+                                    <Canvas Background="Transparent"
+                                            MouseLeftButtonDown="OnPreviewMouseDown"
+                                            MouseMove="OnPreviewMouseMove"
+                                            MouseLeftButtonUp="OnPreviewMouseUp">
+
+                                        <!-- MARK1 搜索 ROI 框 -->
+                                        <Rectangle Canvas.Left="{Binding Mark1RoiX}"
+                                                   Canvas.Top="{Binding Mark1RoiY}"
+                                                   Width="{Binding Mark1RoiW}"
+                                                   Height="{Binding Mark1RoiH}"
+                                                   Stroke="{StaticResource StatusWait}"
+                                                   StrokeThickness="1" />
+
+                                        <!-- MARK2 搜索 ROI 框 -->
+                                        <Rectangle Canvas.Left="{Binding Mark2RoiX}"
+                                                   Canvas.Top="{Binding Mark2RoiY}"
+                                                   Width="{Binding Mark2RoiW}"
+                                                   Height="{Binding Mark2RoiH}"
+                                                   Stroke="{StaticResource StatusWait}"
+                                                   StrokeThickness="1" />
+
+                                        <!-- MARK1 十字（识别结果） -->
+                                        <Path Data="M -20,0 L 20,0 M 0,-20 L 0,20"
+                                              Stroke="{StaticResource StatusRun}"
+                                              StrokeThickness="2"
+                                              Visibility="{Binding Mark1Found, Converter={StaticResource BoolToVisibility}}">
+                                            <Path.RenderTransform>
+                                                <TranslateTransform X="{Binding Mark1X}" Y="{Binding Mark1Y}" />
+                                            </Path.RenderTransform>
+                                        </Path>
+
+                                        <!-- MARK2 十字 -->
+                                        <Path Data="M -20,0 L 20,0 M 0,-20 L 0,20"
+                                              Stroke="{StaticResource StatusRun}"
+                                              StrokeThickness="2"
+                                              Visibility="{Binding Mark2Found, Converter={StaticResource BoolToVisibility}}">
+                                            <Path.RenderTransform>
+                                                <TranslateTransform X="{Binding Mark2X}" Y="{Binding Mark2Y}" />
+                                            </Path.RenderTransform>
+                                        </Path>
+
+                                        <!-- 框选 ROI（模板制作） -->
+                                        <Rectangle Canvas.Left="{Binding SelectedRoiX}"
+                                                   Canvas.Top="{Binding SelectedRoiY}"
+                                                   Width="{Binding SelectedRoiW}"
+                                                   Height="{Binding SelectedRoiH}"
+                                                   Stroke="{StaticResource StatusInfo}"
+                                                   StrokeThickness="2"
+                                                   StrokeDashArray="4,3"
+                                                   Visibility="{Binding HasSelectedRoi, Converter={StaticResource BoolToVisibility}}" />
+                                    </Canvas>
+                                </Grid>
+                            </Viewbox>
+                        </Border>
+
+                        <!-- 右：识别结果 -->
+                        <StackPanel Grid.Column="1">
+                            <Border Style="{StaticResource PanelBorder}">
+                                <StackPanel>
+                                    <TextBlock Text="识别结果" Style="{StaticResource GroupTitleText}" />
+
+                                    <TextBlock Text="{Binding Mark1Text}" Style="{StaticResource StatusValueText}" Margin="0,16,0,0" />
+                                    <TextBlock Text="{Binding Mark2Text}" Style="{StaticResource StatusValueText}" Margin="0,8,0,0" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <TextBlock Text="匹配分" Style="{StaticResource StatusLabelText}" />
+                                        <TextBlock Text="{Binding MatchScoreText}" Style="{StaticResource StatusValueText}" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <TextBlock Text="角度" Style="{StaticResource StatusLabelText}" />
+                                        <TextBlock Text="{Binding AngleText}" Style="{StaticResource StatusValueText}" />
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding DeltaText}"
+                                               Style="{StaticResource StatusValueText}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,8,0,0" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource PanelBorder}" Margin="0,16,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="模板制作（框选 ROI 后保存）" Style="{StaticResource GroupTitleText}" />
+                                    <UniformGrid Columns="2" Margin="0,8,0,0">
+                                        <Button Content="保存 MARK1 模板" Style="{StaticResource SmallButton}"
+                                                Margin="0,0,8,0" Command="{Binding SaveMark1TemplateCommand}" />
+                                        <Button Content="保存 MARK2 模板" Style="{StaticResource SmallButton}"
+                                                Command="{Binding SaveMark2TemplateCommand}" />
+                                    </UniformGrid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 底部：操作按钮 + 状态 -->
+                    <Grid Grid.Row="2" Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Content="拍照" Style="{StaticResource SmallButton}"
+                                Command="{Binding CaptureOnceCommand}" />
+                        <Button Grid.Column="1" Content="{Binding PreviewToggleText}" Style="{StaticResource SmallButton}"
+                                Margin="8,0,0,0" Command="{Binding TogglePreviewCommand}" />
+                        <Button Grid.Column="2" Content="注入偏移" Style="{StaticResource SmallButton}"
+                                Margin="8,0,0,0" Command="{Binding InjectOffsetDemoCommand}" />
+
+                        <TextBlock Grid.Column="4" Text="{Binding PreviewStatus}"
+                                   Style="{StaticResource StatusValueText}"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ==================== Tab 2：九点标定 ==================== -->
+            <TabItem Header="九点标定">
+                <Grid Margin="{StaticResource SpacingMedium}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 标定输入 -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="标定区域中心" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="X" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" Margin="8,0,8,0" />
+                        <TextBox Grid.Column="2" Style="{StaticResource NumericInputBox}" Width="96"
+                                 Text="{Binding CalibrationCenterX, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Column="3" Text="Y" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" Margin="16,0,8,0" />
+                        <TextBox Grid.Column="4" Style="{StaticResource NumericInputBox}" Width="96"
+                                 Text="{Binding CalibrationCenterY, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Column="5" Text="步长(mm)" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" Margin="16,0,8,0" />
+                        <TextBox Grid.Column="6" Style="{StaticResource NumericInputBox}" Width="96" HorizontalAlignment="Left"
+                                 Text="{Binding CalibrationStep, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <Button Grid.Column="6" Content="开始标定" Style="{StaticResource SmallButton}"
+                                HorizontalAlignment="Left" Margin="120,0,0,0"
+                                Command="{Binding StartCalibrationCommand}" />
+                        <Button Grid.Column="6" Content="停止" Style="{StaticResource DangerButton}"
+                                HorizontalAlignment="Left" Margin="224,0,0,0"
+                                Command="{Binding StopCalibrationCommand}" />
+                    </Grid>
+
+                    <!-- 进度 -->
+                    <TextBlock Grid.Row="1" Text="{Binding CalibrationProgress, StringFormat={}进度：{0}}"
+                               Style="{StaticResource StatusValueText}" Margin="0,16,0,0" />
+
+                    <!-- 残差表 -->
+                    <Border Grid.Row="2" Style="{StaticResource PanelBorder}" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="#" Style="{StaticResource StatusLabelText}" />
+                                <TextBlock Grid.Column="1" Text="平台X(mm)" Style="{StaticResource StatusLabelText}" />
+                                <TextBlock Grid.Column="2" Text="平台Y(mm)" Style="{StaticResource StatusLabelText}" />
+                                <TextBlock Grid.Column="3" Text="像素U" Style="{StaticResource StatusLabelText}" />
+                                <TextBlock Grid.Column="4" Text="像素V" Style="{StaticResource StatusLabelText}" />
+                                <TextBlock Grid.Column="5" Text="残差(mm)" Style="{StaticResource StatusLabelText}" />
+                            </Grid>
+
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding CalibrationPoints}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="60" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Index}" Style="{StaticResource StatusValueText}" />
+                                                <TextBlock Grid.Column="1" Text="{Binding PlatformX, StringFormat={}{0:F2}}" Style="{StaticResource StatusValueText}" />
+                                                <TextBlock Grid.Column="2" Text="{Binding PlatformY, StringFormat={}{0:F2}}" Style="{StaticResource StatusValueText}" />
+                                                <TextBlock Grid.Column="3" Text="{Binding PixelU, StringFormat={}{0:F1}}" Style="{StaticResource StatusValueText}" />
+                                                <TextBlock Grid.Column="4" Text="{Binding PixelV, StringFormat={}{0:F1}}" Style="{StaticResource StatusValueText}" />
+                                                <TextBlock Grid.Column="5" Text="{Binding Residual, StringFormat={}{0:F4}}" Style="{StaticResource StatusValueText}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+                    <!-- 结果 + 保存 -->
+                    <Grid Grid.Row="3" Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="{Binding CalibrationResultText}"
+                                   Style="{StaticResource StatusValueText}"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap" />
+
+                        <Button Grid.Column="1" Content="保存标定" Style="{StaticResource PrimaryButton}"
+                                Command="{Binding SaveCalibrationCommand}" />
+                    </Grid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

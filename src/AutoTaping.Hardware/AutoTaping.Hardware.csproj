@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\AutoTaping.Core\AutoTaping.Core.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- 海康 MVS SDK（MvCameraControl.Net）为可选依赖：仅当 libs/ 下存在该 dll 时才编译真实相机实现。
+       接入步骤：把 MvCameraControl.Net.dll 放到 src/AutoTaping.Hardware/libs/ 后重新编译，
+       自动定义 HAS_MVS 常量并引用该程序集；否则编译 HikvisionCamera 的占位实现（降级 Virtual + AL201）。 -->
+  <PropertyGroup Condition="Exists('$(MSBuildThisFileDirectory)libs\MvCameraControl.Net.dll')">
+    <DefineConstants>$(DefineConstants);HAS_MVS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)libs\MvCameraControl.Net.dll')">
+    <Reference Include="MvCameraControl.Net">
+      <HintPath>$(MSBuildThisFileDirectory)libs\MvCameraControl.Net.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

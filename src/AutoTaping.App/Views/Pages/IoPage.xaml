@@ -1,0 +1,123 @@
+<!--
+    职责：IO 监控页——DI/DO 点位网格（绿=ON 深灰=OFF、点位号 + 中文名）+ 工程师强制输出区
+    层：App/Views/Pages
+    依赖：Resources/Colors.xaml、Resources/Styles.xaml、IoViewModel
+    说明：布局按 08-页面清单 页面 7；颜色/字号/尺寸全部引用资源字典
+-->
+<UserControl x:Class="AutoTaping.App.Views.Pages.IoPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BgMain}">
+    <Grid Margin="{StaticResource SpacingMedium}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ===== 标题 + 刷新控制 ===== -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="{Binding Title}" Style="{StaticResource PageTitleText}" />
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="自动刷新 200 ms" Style="{StaticResource HintText}" VerticalAlignment="Center" />
+                <Button Content="{Binding RefreshButtonText}"
+                        Style="{StaticResource SmallButton}"
+                        Margin="16,0,0,0"
+                        Command="{Binding ToggleRefreshCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- ===== DI / DO 网格 ===== -->
+        <Grid Grid.Row="1" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource PanelBorder}" Margin="0,0,8,0">
+                <StackPanel>
+                    <TextBlock Text="输入 DI（只读）" Style="{StaticResource GroupTitleText}" />
+                    <ItemsControl ItemsSource="{Binding DiPoints}"
+                                  ItemTemplate="{StaticResource IoPointTileTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="4" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1" Style="{StaticResource PanelBorder}" Margin="8,0,0,0">
+                <StackPanel>
+                    <TextBlock Text="输出 DO" Style="{StaticResource GroupTitleText}" />
+                    <ItemsControl ItemsSource="{Binding DoPoints}"
+                                  ItemTemplate="{StaticResource IoPointTileTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="4" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ===== 强制输出（仅工程师；权限不足时整体置灰并提示） ===== -->
+        <Border Grid.Row="2" Style="{StaticResource PanelBorder}" Margin="0,16,0,0">
+            <StackPanel>
+                <TextBlock Text="⛔ IO 强制输出（工程师）" Style="{StaticResource GroupTitleText}" />
+
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                            IsEnabled="{Binding CanForceOutput}">
+                    <TextBlock Text="点位" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" />
+                    <ComboBox Width="200"
+                              Margin="8,0,0,0"
+                              ItemsSource="{Binding DoPoints}"
+                              SelectedItem="{Binding SelectedDoPoint}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Point}"
+                                               FontFamily="{StaticResource FontFamilyNumeric}" />
+                                    <TextBlock Text="{Binding DisplayName}" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <TextBlock Text="状态" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" Margin="16,0,0,0" />
+                    <ComboBox Width="120"
+                              Margin="8,0,0,0"
+                              ItemsSource="{Binding ForceStates}"
+                              SelectedItem="{Binding SelectedForceState}" />
+
+                    <Button Content="写 入"
+                            Style="{StaticResource SmallButton}"
+                            Margin="16,0,0,0"
+                            Command="{Binding ForceWriteCommand}" />
+                    <Button Content="全部清除"
+                            Style="{StaticResource SmallButton}"
+                            Margin="8,0,0,0"
+                            Command="{Binding ClearForcedCommand}" />
+                </StackPanel>
+
+                <TextBlock Text="{Binding OperationText}"
+                           Style="{StaticResource HintText}"
+                           Margin="0,8,0,0" />
+
+                <TextBlock Text="IO 强制输出需要工程师权限，请切换到工程师账户后再试。"
+                           Style="{StaticResource HintText}"
+                           Foreground="{StaticResource StatusWarn}"
+                           Margin="0,8,0,0"
+                           Visibility="{Binding CanForceOutput, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>
