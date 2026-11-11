@@ -110,9 +110,8 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- 标量参数（工艺 / 位置 / 视觉 / 报警阈值） -->
-                <Border Grid.Row="0" Style="{StaticResource PanelBorder}" Padding="12"
-                        Visibility="{Binding IsTapePathGroup, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}">
+                <!-- 标量参数（工艺 / 位置 / 视觉 / 报警阈值；点贴无贴附路径，四组都是标量） -->
+                <Border Grid.Row="0" Style="{StaticResource PanelBorder}" Padding="12">
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <ItemsControl ItemsSource="{Binding Parameters}">
                             <ItemsControl.ItemsPanel>
@@ -170,108 +169,6 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                </Border>
-
-                <!-- 贴附路径（模式 + 路径点 + 圆弧参数） -->
-                <Border Grid.Row="0" Style="{StaticResource PanelBorder}"
-                        Visibility="{Binding IsTapePathGroup, Converter={StaticResource BoolToVisibility}}">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="路径模式" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" />
-                            <ComboBox ItemsSource="{Binding TapePathModes}"
-                                      SelectedItem="{Binding TapePathMode}"
-                                      IsEnabled="{Binding CanEdit}"
-                                      Width="160"
-                                      Margin="8,0,16,0" />
-                            <Button Content="添加路径点" Style="{StaticResource SmallButton}"
-                                    Command="{Binding AddPointCommand}" />
-                        </StackPanel>
-
-                        <Border Grid.Row="1" Background="{StaticResource BgCard}"
-                                CornerRadius="{StaticResource ControlCornerRadius}" Padding="8">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding TapePathPoints}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                                <TextBlock Text="{Binding Index}"
-                                                           Style="{StaticResource NumericText}"
-                                                           FontSize="{StaticResource FontSizeHint}"
-                                                           Width="32"
-                                                           VerticalAlignment="Center" />
-                                                <TextBox Width="110" Text="{Binding Xt, UpdateSourceTrigger=PropertyChanged}"
-                                                         Style="{StaticResource ParameterInputBox}"
-                                                         IsReadOnly="{Binding IsReadOnly}" Margin="0,0,8,0" />
-                                                <TextBox Width="110" Text="{Binding Yt, UpdateSourceTrigger=PropertyChanged}"
-                                                         Style="{StaticResource ParameterInputBox}"
-                                                         IsReadOnly="{Binding IsReadOnly}" Margin="0,0,8,0" />
-                                                <TextBox Width="90" Text="{Binding Zt, UpdateSourceTrigger=PropertyChanged}"
-                                                         Style="{StaticResource ParameterInputBox}"
-                                                         IsReadOnly="{Binding IsReadOnly}" Margin="0,0,8,0" />
-                                                <TextBlock Text="X / Y / Z（mm）"
-                                                           Style="{StaticResource HintText}"
-                                                           VerticalAlignment="Center"
-                                                           Margin="0,0,16,0" />
-                                                <Button Content="删 除" Style="{StaticResource SmallButton}"
-                                                        Command="{Binding DataContext.RemovePointCommand,
-                                                                  RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                        CommandParameter="{Binding}" />
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                        </Border>
-
-                        <Grid Grid.Row="2" Margin="0,12,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <TextBlock Grid.Column="0" Text="圆心 X" Style="{StaticResource StatusLabelText}"
-                                       VerticalAlignment="Center" Margin="0,0,8,0" />
-                            <TextBox Grid.Column="1" Width="100" Text="{Binding ArcCenterXText, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource NumericInputBox}" IsEnabled="{Binding IsArcMode}"
-                                     IsReadOnly="{Binding IsReadOnly}"
-                                     Margin="0,0,16,0" />
-                            <TextBlock Grid.Column="2" Text="圆心 Y" Style="{StaticResource StatusLabelText}"
-                                       VerticalAlignment="Center" Margin="0,0,8,0" />
-                            <TextBox Grid.Column="3" Width="100" Text="{Binding ArcCenterYText, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource NumericInputBox}" IsEnabled="{Binding IsArcMode}"
-                                     IsReadOnly="{Binding IsReadOnly}"
-                                     Margin="0,0,16,0" />
-                            <TextBlock Grid.Column="4" Text="半径" Style="{StaticResource StatusLabelText}"
-                                       VerticalAlignment="Center" Margin="0,0,8,0" />
-                            <TextBox Grid.Column="5" Width="100" Text="{Binding ArcRadiusText, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource NumericInputBox}" IsEnabled="{Binding IsArcMode}"
-                                     IsReadOnly="{Binding IsReadOnly}"
-                                     Margin="0,0,16,0" />
-                            <TextBlock Grid.Column="6" Text="起止角" Style="{StaticResource StatusLabelText}"
-                                       VerticalAlignment="Center" Margin="0,0,8,0" />
-                            <TextBox Grid.Column="7" Width="90" Text="{Binding ArcStartText, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource NumericInputBox}" IsEnabled="{Binding IsArcMode}"
-                                     IsReadOnly="{Binding IsReadOnly}"
-                                     Margin="0,0,8,0" />
-                            <TextBox Grid.Column="8" Width="90" Text="{Binding ArcEndText, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource NumericInputBox}" IsEnabled="{Binding IsArcMode}"
-                                     IsReadOnly="{Binding IsReadOnly}" />
-                        </Grid>
-                    </Grid>
                 </Border>
 
                 <!-- 参数变更记录 -->

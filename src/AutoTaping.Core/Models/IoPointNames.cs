@@ -12,13 +12,13 @@ public static class IoPointNames
 {
     // ---------- DI（输入） ----------
 
-    /// <summary>X00 上料位有料。</summary>
+    /// <summary>X00 载具到位（产线形态：工位光电，检测到即停线）。</summary>
     public const string MaterialAtLoad = "X00";
 
-    /// <summary>X01 贴附位有料。</summary>
+    /// <summary>X01 出料侧有料（产线形态：用于堵料判断 AL404）。</summary>
     public const string MaterialAtTape = "X01";
 
-    /// <summary>X02 下料位有料。</summary>
+    /// <summary>X02 料盘缺料（由"下料位有料"改为"料盘缺料"，报警 AL303）。</summary>
     public const string MaterialAtUnload = "X02";
 
     /// <summary>X03 真空压力开关（吸住确认，报警 AL301 的判据）。</summary>
@@ -58,4 +58,7 @@ public static class IoPointNames
 
     /// <summary>Y06 蜂鸣器。</summary>
     public const string Buzzer = "Y06";
+
+    /// <summary>Y07 传送带运行（产线形态新增：1 = 皮带运行，0 = 停线）。</summary>
+    public const string ConveyorRun = "Y07";
 }

@@ -46,8 +46,8 @@ public sealed class RecipeRepositoryTests
         Assert.Equal("A123", loaded.ProductCode);
         Assert.Equal(500, loaded.Parameters.Process.HoldPressureMs);
         Assert.Equal(50.0, loaded.Parameters.Process.SafeHeightMm, 3);   // JSON 未写的字段用默认值
-        Assert.Equal(TapePathMode.Line, loaded.Parameters.TapePath.Mode);  // 枚举以字符串存取
-        Assert.Equal(2, loaded.Parameters.TapePath.Points.Count);
+        Assert.Equal(80.0, loaded.Parameters.Position.PickPosY, 3);      // 位置参数（头坐标）默认值
+        Assert.Equal(44.0, loaded.Parameters.Position.CameraOffsetY, 3); // 相机偏置默认值（手眼标定）
         Assert.False(loaded.IsActive);
         Assert.Equal("tech01", loaded.CreatedBy);
         Assert.NotEqual(default, loaded.CreatedAt);
@@ -86,7 +86,7 @@ public sealed class RecipeRepositoryTests
             Name = "导入导出验证",
             ProductCode = "EXP-1",
             TapeSpec = "3M-467MP",
-            Parameters = new RecipeParameters { Process = { TapeSpeedMmPerSec = 66.0 } },
+            Parameters = new RecipeParameters { Position = { PickPosY = 66.0 } },
             Version = 1,
             IsActive = false,
             CreatedBy = "tech01"
@@ -99,7 +99,7 @@ public sealed class RecipeRepositoryTests
         var json = File.ReadAllText(writtenPath);
         Assert.Contains("\"name\"", json);
         Assert.Contains("导入导出验证", json);
-        Assert.Contains("tapeSpeedMmPerSec", json);
+        Assert.Contains("pickPosY", json);
 
         // 解除唯一名约束后才能用同名重新导入
         repository.SoftDelete(id);
@@ -111,7 +111,7 @@ public sealed class RecipeRepositoryTests
         Assert.NotNull(imported);
         Assert.Equal("导入导出验证", imported.Name);
         Assert.Equal("EXP-1", imported.ProductCode);
-        Assert.Equal(66.0, imported.Parameters.Process.TapeSpeedMmPerSec, 3);
+        Assert.Equal(66.0, imported.Parameters.Position.PickPosY, 3);
         Assert.False(imported.IsActive);
     }
 }

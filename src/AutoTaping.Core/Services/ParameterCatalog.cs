@@ -32,7 +32,6 @@ public static class ParameterCatalog
         new("safeHeightMm", "安全高度", "mm", ParameterGroup.Process, 10, 80, 50.0, 1),
         new("tapeHeightMm", "贴附高度", "mm", ParameterGroup.Process, 0, 10, 2.0, 1),
         new("moveSpeedMmPerSec", "移动速度", "mm/s", ParameterGroup.Process, 10, 300, 100.0, 1),
-        new("tapeSpeedMmPerSec", "贴附速度", "mm/s", ParameterGroup.Process, 10, 200, 80.0, 1),
         new("rotateSpeedDegPerSec", "旋转速度", "°/s", ParameterGroup.Process, 10, 180, 90.0, 1),
         new("holdPressureMs", "保压时间", "ms", ParameterGroup.Process, 100, 3000, 500, 0),
         new("holdPressureMpa", "贴附压力", "MPa", ParameterGroup.Process, 0.10, 0.40, 0.25, 2),
@@ -40,14 +39,18 @@ public static class ParameterCatalog
         new("blowOffMs", "吹气时间", "ms", ParameterGroup.Process, 100, 1000, 300, 0),
 
         // ---------- 位置参数（09 文档 4.2，范围为轴软限位内） ----------
-        new("photoPosX", "拍照位 X", "mm", ParameterGroup.Position, 0, AxisTravelMm, 150.0, 2),
+        new("photoPosX", "拍照位 X", "mm", ParameterGroup.Position, 0, AxisTravelMm, 156.0, 2),
         new("photoPosY", "拍照位 Y", "mm", ParameterGroup.Position, 0, AxisTravelMm, 200.0, 2),
-        new("tapeBaseX", "贴附基准 X", "mm", ParameterGroup.Position, 0, AxisTravelMm, 220.0, 2),
+        new("tapeBaseX", "贴附基准 X", "mm", ParameterGroup.Position, 0, AxisTravelMm, 200.0, 2),
         new("tapeBaseY", "贴附基准 Y", "mm", ParameterGroup.Position, 0, AxisTravelMm, 200.0, 2),
         new("tapeBaseR", "贴附基准 R", "°", ParameterGroup.Position, -180, 180, 0.0, 2),
-        new("unloadX", "下料位 X", "mm", ParameterGroup.Position, 0, AxisTravelMm, 350.0, 2),
-        new("unloadY", "下料位 Y", "mm", ParameterGroup.Position, 0, AxisTravelMm, 200.0, 2),
-        new("rotationCenterX", "旋转中心 X", "mm", ParameterGroup.Position, 0, AxisTravelMm, 220.0, 2),
+        new("pickPosX", "取料位 X", "mm", ParameterGroup.Position, 0, AxisTravelMm, 200.0, 2),
+        new("pickPosY", "取料位 Y", "mm", ParameterGroup.Position, 0, AxisTravelMm, 80.0, 2),
+        new("cameraOffsetX", "相机偏置 X", "mm", ParameterGroup.Position, -200, 200, 0.0, 2,
+            Permission.RecipeEdit, "手眼标定值：吸嘴中心 − 相机光轴，改动后必须重新验证拍照位"),
+        new("cameraOffsetY", "相机偏置 Y", "mm", ParameterGroup.Position, -200, 200, 44.0, 2,
+            Permission.RecipeEdit, "手眼标定值：吸嘴中心 − 相机光轴，改动后必须重新验证拍照位"),
+        new("rotationCenterX", "旋转中心 X", "mm", ParameterGroup.Position, 0, AxisTravelMm, 200.0, 2),
         new("rotationCenterY", "旋转中心 Y", "mm", ParameterGroup.Position, 0, AxisTravelMm, 200.0, 2),
 
         // ---------- 视觉参数（09 文档 4.3） ----------
@@ -96,7 +99,6 @@ public static class ParameterCatalog
             case "safeHeightMm": value = parameters.Process.SafeHeightMm; return true;
             case "tapeHeightMm": value = parameters.Process.TapeHeightMm; return true;
             case "moveSpeedMmPerSec": value = parameters.Process.MoveSpeedMmPerSec; return true;
-            case "tapeSpeedMmPerSec": value = parameters.Process.TapeSpeedMmPerSec; return true;
             case "rotateSpeedDegPerSec": value = parameters.Process.RotateSpeedDegPerSec; return true;
             case "holdPressureMs": value = parameters.Process.HoldPressureMs; return true;
             case "holdPressureMpa": value = parameters.Process.HoldPressureMpa; return true;
@@ -108,8 +110,10 @@ public static class ParameterCatalog
             case "tapeBaseX": value = parameters.Position.TapeBaseX; return true;
             case "tapeBaseY": value = parameters.Position.TapeBaseY; return true;
             case "tapeBaseR": value = parameters.Position.TapeBaseR; return true;
-            case "unloadX": value = parameters.Position.UnloadX; return true;
-            case "unloadY": value = parameters.Position.UnloadY; return true;
+            case "pickPosX": value = parameters.Position.PickPosX; return true;
+            case "pickPosY": value = parameters.Position.PickPosY; return true;
+            case "cameraOffsetX": value = parameters.Position.CameraOffsetX; return true;
+            case "cameraOffsetY": value = parameters.Position.CameraOffsetY; return true;
             case "rotationCenterX": value = parameters.Position.RotationCenterX; return true;
             case "rotationCenterY": value = parameters.Position.RotationCenterY; return true;
 
@@ -145,7 +149,6 @@ public static class ParameterCatalog
             case "safeHeightMm": parameters.Process.SafeHeightMm = value; return true;
             case "tapeHeightMm": parameters.Process.TapeHeightMm = value; return true;
             case "moveSpeedMmPerSec": parameters.Process.MoveSpeedMmPerSec = value; return true;
-            case "tapeSpeedMmPerSec": parameters.Process.TapeSpeedMmPerSec = value; return true;
             case "rotateSpeedDegPerSec": parameters.Process.RotateSpeedDegPerSec = value; return true;
             case "holdPressureMs": parameters.Process.HoldPressureMs = ToInt(value); return true;
             case "holdPressureMpa": parameters.Process.HoldPressureMpa = value; return true;
@@ -157,8 +160,10 @@ public static class ParameterCatalog
             case "tapeBaseX": parameters.Position.TapeBaseX = value; return true;
             case "tapeBaseY": parameters.Position.TapeBaseY = value; return true;
             case "tapeBaseR": parameters.Position.TapeBaseR = value; return true;
-            case "unloadX": parameters.Position.UnloadX = value; return true;
-            case "unloadY": parameters.Position.UnloadY = value; return true;
+            case "pickPosX": parameters.Position.PickPosX = value; return true;
+            case "pickPosY": parameters.Position.PickPosY = value; return true;
+            case "cameraOffsetX": parameters.Position.CameraOffsetX = value; return true;
+            case "cameraOffsetY": parameters.Position.CameraOffsetY = value; return true;
             case "rotationCenterX": parameters.Position.RotationCenterX = value; return true;
             case "rotationCenterY": parameters.Position.RotationCenterY = value; return true;
 

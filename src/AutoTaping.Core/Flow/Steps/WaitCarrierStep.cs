@@ -1,6 +1,6 @@
-// 职责：步骤 2 等待上料位有料——X00=1 才继续，超时 30s 只暂停不报警；同时承担节拍起点的配方参数热刷新
+// 职责：步骤 2 等待载具到位并停线——DI X00=1 后立即停线（Y07=0）；超时 30s 只暂停不报警
 // 层：Core/Flow/Steps
-// 依赖：IIoService、IRecipeRepository（Core/Abstractions）、IoPointNames / AlarmLevel（Core/Models）、FlowException、ILogger
+// 依赖：IIoService、IRecipeRepository（Core/Abstractions）、IoPointNames / AlarmLevel、FlowException、ILogger
 
 using System.Diagnostics;
 using AutoTaping.Core.Abstractions;
@@ -11,30 +11,29 @@ using Microsoft.Extensions.Logging;
 namespace AutoTaping.Core.Flow.Steps;
 
 /// <summary>
-/// 等待上料步骤（05 第 4.2 节第 2 步）。检测到有料时开始单件节拍计时（05 第 7.1 节）。
+/// 等待载具到位步骤（05 第 4.2 节第 2 步）。产线形态下由光电检测载具，到位即停线，
+/// 靠皮带摩擦把载具停在工位；超时只暂停（可能是上游没料），不报警停机。
 /// <para>
-/// 参数热生效（09 文档第四节）：本步骤是引擎每个节拍的起点（引擎走完第 15 步后回到本步），
-/// 因此在等待上料前先用「当前激活配方」的最新参数刷新流程上下文，
-/// 使改完参数在下一个节拍生效而无须重启软件。
+/// 本步骤同时承担节拍起点的配方参数热刷新（09 文档第四节）：改完参数在下一个节拍生效。
 /// </para>
 /// </summary>
-public sealed class WaitMaterialStep : FlowStep
+public sealed class WaitCarrierStep : FlowStep
 {
-    /// <summary>上料等待超时（ms），超时报警 AL403（提示级）并暂停。</summary>
-    private const int MaterialTimeoutMs = 30_000;
+    /// <summary>载具等待超时（ms），超时报警 AL403（提示级）并暂停。</summary>
+    private const int CarrierTimeoutMs = 30_000;
 
     /// <summary>轮询 X00 的间隔（ms）。</summary>
     private const int PollIntervalMs = 100;
 
     private readonly IIoService _io;
     private readonly IRecipeRepository _recipes;
-    private readonly ILogger<WaitMaterialStep> _log;
+    private readonly ILogger<WaitCarrierStep> _log;
 
-    /// <summary>构造等待上料步骤。</summary>
+    /// <summary>构造等待载具步骤。</summary>
     /// <param name="io">IO 服务。</param>
     /// <param name="recipes">配方仓储（每个节拍起点刷新参数，实现参数热生效）。</param>
     /// <param name="log">日志。</param>
-    public WaitMaterialStep(IIoService io, IRecipeRepository recipes, ILogger<WaitMaterialStep> log)
+    public WaitCarrierStep(IIoService io, IRecipeRepository recipes, ILogger<WaitCarrierStep> log)
     {
         _io = io;
         _recipes = recipes;
@@ -42,15 +41,18 @@ public sealed class WaitMaterialStep : FlowStep
     }
 
     /// <inheritdoc />
-    public override string Name => "WaitMaterial";
+    public override string Name => "WaitCarrier";
 
     /// <summary>引擎兜底超时略大于内部 30s 判定，避免抢在"暂停"语义之前。</summary>
-    public override int TimeoutMs => MaterialTimeoutMs + 2_000;
+    public override int TimeoutMs => CarrierTimeoutMs + 2_000;
 
     /// <inheritdoc />
     public override async Task ExecuteAsync(FlowContext ctx, CancellationToken ct)
     {
         RefreshRecipeParameters(ctx);
+
+        // 传送带先跑起来等来料；若已在上游运行则保持
+        _io.WriteDo(IoPointNames.ConveyorRun, true);
 
         var stopwatch = Stopwatch.StartNew();
 
@@ -58,9 +60,9 @@ public sealed class WaitMaterialStep : FlowStep
         {
             ct.ThrowIfCancellationRequested();
 
-            if (stopwatch.ElapsedMilliseconds >= MaterialTimeoutMs)
+            if (stopwatch.ElapsedMilliseconds >= CarrierTimeoutMs)
             {
-                throw new FlowException(Name, "上料位长时间无料，请补充物料",
+                throw new FlowException(Name, "载具长时间未到位，请检查上游来料",
                                         "AL403", AlarmLevel.Info, "上料",
                                         pauseInsteadOfAlarm: true, innerException: null);
             }
@@ -68,7 +70,11 @@ public sealed class WaitMaterialStep : FlowStep
             await Task.Delay(PollIntervalMs, ct);
         }
 
-        // 检测到有料 → 开始单件节拍计时
+        // 到位立即停线：停位精度靠皮带摩擦 + 后续视觉纠偏
+        _io.WriteDo(IoPointNames.ConveyorRun, false);
+        _log.LogDebug("载具到位，停线");
+
+        // 检测到载具 → 开始单件节拍计时
         ctx.StepWatch.Restart();
     }
 

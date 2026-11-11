@@ -16,6 +16,17 @@ S0~S9 已全部完成（S8 真实硬件仅代码层，待现场验收）。逐�
 - 结构化日志占位符；硬件参数进 appsettings.json、工艺参数进配方、纯算法常量用带注释 const。
 - CSV 导出 UTF-8 with BOM；数据库时间列统一 TEXT `yyyy-MM-dd HH:mm:ss`。
 
+## 当前构型（2026-11-11 重构后）
+台式机「平台 XY + 滚贴」已重构为**产线「龙门 XYZR + 停线定位 + 点贴」**：
+- 4 轴全在龙门（头动，工件随传送带停线不动）；相机 Eye-in-Hand，`photoPos = tapeBase − cameraOffset`。
+- 自动流程 **11 步**：CheckPreconditions → WaitCarrier → SettleDelay → CaptureAndCorrect → MoveToPickPos →
+  PickTape → MoveToTapePos → PressAndHold → ReleaseTape → ConveyOut → RecordOutput。
+- **点贴无贴附路径**：`TapePathParameters/TapePathPoint/TapePathMode/TapePathPointItemViewModel` 已删除，
+  `RecipeParameters.TapePath`、`ProcessParameters.TapeSpeedMmPerSec`、`ParameterGroup.TapePath`、
+  `PositionParameters.UnloadX/Y` 全部移除；旧配方 JSON 里的残留键被 System.Text.Json 静默忽略（未配 Disallow）。
+- 位置参数全是头坐标：拍照位 156/200、贴附基准 200/200、取料位 200/80、相机偏置 0/44、旋转中心 200/200。
+- 基线：编译 0 错 0 警告，`dotnet test` 154/154。
+
 ## 阶段成果一览
 | 阶段 | 交付 | 测试数 |
 |---|---|---|
@@ -25,7 +36,7 @@ S0~S9 已全部完成（S8 真实硬件仅代码层，待现场验收）。逐�
 | S3 | 主窗口壳（状态栏/8 导航/内容区/操作条）、8 页面壳、LoginDialog、IdleMonitor 锁屏、权限 | 38 |
 | S4 | DeviceMonitor(200ms)、ManualPage 点动/回零/定位、IoPage + 强制输出、页面生命周期 | 45 |
 | S5 | Vision 层 7 算法类（标定/模板匹配/纠偏/旋转补偿）、VisionPage | 18 |
-| S6 | DeviceStateMachine、InterlockChecker(10 条)、AutoFlowEngine + 15 步骤、AutoFlowCoordinator、AutoPage | 95 累计 |
+| S6 | DeviceStateMachine、InterlockChecker(10 条)、AutoFlowEngine + 11 步骤（点贴）、AutoFlowCoordinator、AutoPage | 95 累计 |
 | S7 | ParameterCatalog(31 参数)/Validator、AlarmService 去重恢复、OutputService、Recipe/Alarm/Output 三页 | 135 |
 | S8 | LeadshineMotionCard(LTDMC P/Invoke)、MotionCardIoService、HikvisionCamera(HAS_MVS)、降级 | 135 |
 | S9 | DailyMaintenanceService、BackupService、SelfCheckService、UserManagementService、SystemPage | 154 |

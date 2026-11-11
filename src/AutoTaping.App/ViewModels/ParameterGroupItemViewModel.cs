@@ -1,4 +1,4 @@
-// 职责：参数页左侧分组树的一项（分组名 + 参数个数 + 是否贴附路径组）
+// 职责：参数页左侧分组树的一项（分组名 + 参数个数）
 // 层：App/ViewModels
 // 依赖：ParameterGroup（Core/Models）
 
@@ -14,7 +14,7 @@ public sealed class ParameterGroupItemViewModel
 {
     /// <summary>构造分组节点。</summary>
     /// <param name="group">分组枚举。</param>
-    /// <param name="parameterCount">该组可编辑的标量参数个数（贴附路径组为路径点个数）。</param>
+    /// <param name="parameterCount">该组可编辑的标量参数个数。</param>
     public ParameterGroupItemViewModel(ParameterGroup group, int parameterCount)
     {
         Group = group;
@@ -33,13 +33,10 @@ public sealed class ParameterGroupItemViewModel
         ParameterGroup.Process => "工艺参数",
         ParameterGroup.Position => "位置参数",
         ParameterGroup.Vision => "视觉参数",
-        ParameterGroup.TapePath => "贴附路径",
         ParameterGroup.Alarm => "报警阈值",
         _ => Group.ToString()
     };
 
     /// <summary>树节点显示文本，形如 <c>工艺参数（9）</c>。</summary>
-    public string DisplayText => Group == ParameterGroup.TapePath
-        ? DisplayName
-        : $"{DisplayName}（{ParameterCount}）";
+    public string DisplayText => $"{DisplayName}（{ParameterCount}）";
 }

@@ -18,9 +18,6 @@ public sealed class ProcessParameters
     /// <summary>移动速度（mm/s），范围 10 ~ 300。</summary>
     public double MoveSpeedMmPerSec { get; set; } = 100.0;
 
-    /// <summary>贴附速度（mm/s），范围 10 ~ 200。</summary>
-    public double TapeSpeedMmPerSec { get; set; } = 80.0;
-
     /// <summary>旋转速度（°/s），范围 10 ~ 180。</summary>
     public double RotateSpeedDegPerSec { get; set; } = 90.0;
 

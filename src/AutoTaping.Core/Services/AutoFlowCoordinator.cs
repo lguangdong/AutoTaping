@@ -444,25 +444,21 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
                && !_alarm.HasUnackedCritical();
     }
 
-    /// <summary>按 05 第 4.2 节顺序构建 15 个流程步骤。</summary>
+    /// <summary>按 05 第 4.2 节顺序构建 11 个流程步骤（产线 + 点贴：无贴附路径、无下料位移动）。</summary>
     private IReadOnlyList<FlowStep> BuildSteps()
     {
         return new List<FlowStep>
         {
             new CheckPreconditionsStep(_interlock, _monitor, _alarm),
-            new WaitMaterialStep(_io, _recipes, _loggerFactory.CreateLogger<WaitMaterialStep>()),
-            new MoveToPhotoPosStep(_motion),
+            new WaitCarrierStep(_io, _recipes, _loggerFactory.CreateLogger<WaitCarrierStep>()),
             new SettleDelayStep(),
             new CaptureAndCorrectStep(_camera, _vision),
+            new MoveToPickPosStep(_motion),
+            new PickTapeStep(_motion, _io),
             new MoveToTapePosStep(_motion),
-            new MoveZToTapeHeightStep(_motion),
-            new VacuumOnStep(_io),
-            new MoveToTapeStartStep(_motion),
-            new TapePathStep(_motion),
-            new HoldPressureStep(),
-            new VacuumOffAndBlowStep(_io),
-            new MoveZSafeStep(_motion),
-            new MoveToUnloadPosStep(_motion),
+            new PressAndHoldStep(_motion, _io),
+            new ReleaseTapeStep(_motion, _io),
+            new ConveyOutStep(_io),
             new RecordOutputStep(_outputs, _clock, _loggerFactory.CreateLogger<RecordOutputStep>())
         };
     }

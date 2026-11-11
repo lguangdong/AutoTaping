@@ -107,13 +107,6 @@ public sealed class ParameterValidatorTests
     {
         foreach (var group in Enum.GetValues<ParameterGroup>())
         {
-            if (group == ParameterGroup.TapePath)
-            {
-                // 贴附路径由「模式 + 路径点 + 圆弧参数」组成，不是标量参数，参数页用独立编辑区
-                Assert.Empty(ParameterCatalog.GetByGroup(group));
-                continue;
-            }
-
             Assert.NotEmpty(ParameterCatalog.GetByGroup(group));
         }
     }

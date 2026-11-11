@@ -1,4 +1,4 @@
-// 职责：配方参数分组枚举（工艺 / 位置 / 视觉 / 贴附路径 / 报警阈值），与 08 文档参数页左侧分组树一致
+// 职责：配方参数分组枚举（工艺 / 位置 / 视觉 / 报警阈值），与 08 文档参数页左侧分组树一致
 // 层：Core/Models
 // 依赖：无
 
@@ -19,9 +19,6 @@ public enum ParameterGroup
     /// <summary>视觉参数（JSON 键 <c>vision</c>）。</summary>
     Vision = 2,
 
-    /// <summary>贴附路径（JSON 键 <c>tapePath</c>）：模式 + 路径点 + 圆弧参数。</summary>
-    TapePath = 3,
-
     /// <summary>报警阈值（JSON 键 <c>alarm</c>）。</summary>
-    Alarm = 4
+    Alarm = 3
 }

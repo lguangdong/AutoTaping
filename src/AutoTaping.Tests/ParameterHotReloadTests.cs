@@ -1,4 +1,4 @@
-// 职责：参数热生效测试——WaitMaterialStep 在节拍起点用激活配方的最新参数刷新流程上下文
+// 职责：参数热生效测试——WaitCarrierStep 在节拍起点用激活配方的最新参数刷新流程上下文
 // 层：Tests
 // 依赖：TestDatabase、VirtualIoService、AutoTaping.Core.Flow/Steps/Models
 
@@ -13,7 +13,7 @@ namespace AutoTaping.Tests;
 
 /// <summary>
 /// 参数热生效测试，对应 S7 验收标准第 7 条（切配方/改参数后下一个节拍使用新参数，无需重启软件）。
-/// 刷新点选在 <see cref="WaitMaterialStep"/>：它是引擎每个节拍的起点（走完第 15 步回到本步）。
+/// 刷新点选在 <see cref="WaitCarrierStep"/>：它是引擎每个节拍的起点（走完第 15 步回到本步）。
 /// </summary>
 public sealed class ParameterHotReloadTests
 {
@@ -51,7 +51,7 @@ public sealed class ParameterHotReloadTests
             new Dictionary<string, bool> { ["X00"] = true, ["X05"] = true, ["X06"] = true, ["X07"] = true },
             NullLogger<VirtualIoService>.Instance);
 
-        var step = new WaitMaterialStep(io, recipes, NullLogger<WaitMaterialStep>.Instance);
+        var step = new WaitCarrierStep(io, recipes, NullLogger<WaitCarrierStep>.Instance);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await step.ExecuteAsync(context, cts.Token);
@@ -85,7 +85,7 @@ public sealed class ParameterHotReloadTests
             new Dictionary<string, bool> { ["X00"] = true },
             NullLogger<VirtualIoService>.Instance);
 
-        var step = new WaitMaterialStep(io, recipes, NullLogger<WaitMaterialStep>.Instance);
+        var step = new WaitCarrierStep(io, recipes, NullLogger<WaitCarrierStep>.Instance);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await step.ExecuteAsync(context, cts.Token);
