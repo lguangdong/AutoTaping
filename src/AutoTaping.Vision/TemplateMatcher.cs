@@ -59,6 +59,12 @@ public sealed class TemplateMatcher : IDisposable
     /// <summary>模板是否已加载。</summary>
     public bool HasTemplate => _template is not null && !_template.Empty();
 
+    /// <summary>模板宽度（像素）；未加载时为 0。</summary>
+    public int TemplateWidth => _template?.Width ?? 0;
+
+    /// <summary>模板高度（像素）；未加载时为 0。</summary>
+    public int TemplateHeight => _template?.Height ?? 0;
+
     /// <summary>
     /// 在 ROI 内搜索模板，返回亚像素中心与得分；未找到（低于阈值）返回 <see langword="null"/>。
     /// </summary>
@@ -84,8 +90,11 @@ public sealed class TemplateMatcher : IDisposable
 
         var resultRows = search.Rows - _template.Rows + 1;
         var resultCols = search.Cols - _template.Cols + 1;
-        if (resultRows <= 0 || resultCols <= 0)
+        if (resultRows <= 1 || resultCols <= 1)
         {
+            // 0 → 模板比搜索区大；1 → 搜索区与模板同尺寸。
+            // 后者只有一个候选位置，必然"高分命中"且坐标恒等于搜索区中心（亚像素细化也无邻点可用），
+            // 属于配置错误（把模板框当成搜索区域），必须判失败，绝不能返回一个看似正常的值。
             return null;
         }
 
@@ -99,9 +108,12 @@ public sealed class TemplateMatcher : IDisposable
         }
 
         var sub = RefineSubPixel(result, maxLoc);
+
+        // 返回的是"模板覆盖区域的几何中心"（左上角 + (边长-1)/2）：
+        // 模板宽 W 覆盖像素 0..W-1，中心索引是 (W-1)/2；写成 W/2 会引入固定的 +0.5px 偏差。
         var center = new Point2f(
-            roi.X + sub.X + _template.Width / 2f,
-            roi.Y + sub.Y + _template.Height / 2f);
+            roi.X + sub.X + ((_template.Width - 1) / 2f),
+            roi.Y + sub.Y + ((_template.Height - 1) / 2f));
 
         return new TemplateMatchResult(center, maxVal);
     }

@@ -1,5 +1,5 @@
 <!--
-    职责：视觉标定页——实时预览（叠加 MARK 十字与 ROI 框）+ 识别结果 + 九点标定向导 + 模板制作
+    职责：视觉标定页——单次拍照（叠加 MARK 十字与 ROI 框）+ 手动识别 + 九点标定向导 + 模板制作
     层：App/Views/Pages
     依赖：Resources/Colors.xaml、Resources/Styles.xaml、VisionViewModel
     说明：布局按 08-页面清单 页面 4；颜色/字号/尺寸全部引用资源字典，禁止字面值；
@@ -20,8 +20,8 @@
         <TabControl Grid.Row="1" Margin="0,16,0,0"
                     Background="{StaticResource BgMain}"
                     BorderBrush="{StaticResource BorderNormal}">
-            <!-- ==================== Tab 1：实时预览 ==================== -->
-            <TabItem Header="实时预览">
+            <!-- ==================== Tab 1：拍照识别 ==================== -->
+            <TabItem Header="拍照识别">
                 <Grid Margin="{StaticResource SpacingMedium}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -32,10 +32,6 @@
                     <!-- 相机设置栏 -->
                     <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
@@ -61,18 +57,21 @@
                                        Style="{StaticResource StatusValueText}" />
                         </StackPanel>
 
-                        <TextBlock Grid.Column="1" Text="曝光" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" />
-                        <TextBox Grid.Column="2" Style="{StaticResource NumericInputBox}" Width="96"
-                                 Text="{Binding Exposure, UpdateSourceTrigger=PropertyChanged}" Margin="8,0,16,0" />
-                        <TextBlock Grid.Column="3" Text="μs  增益" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" />
-                        <TextBox Grid.Column="4" Style="{StaticResource NumericInputBox}" Width="80"
-                                 Text="{Binding Gain, UpdateSourceTrigger=PropertyChanged}" Margin="8,0,16,0" />
-                        <TextBlock Grid.Column="4" Text="dB" Style="{StaticResource UnitText}" VerticalAlignment="Center"
-                                   Margin="80,0,0,0" HorizontalAlignment="Left" />
-                        <Button Grid.Column="5" Content="应用"
-                                Style="{StaticResource SmallButton}"
-                                HorizontalAlignment="Left"
-                                Command="{Binding ApplyCameraSettingsCommand}" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="曝光" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" />
+                            <TextBox Style="{StaticResource NumericInputBox}" Width="96" Margin="8,0"
+                                     Text="{Binding Exposure, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Text="μs" Style="{StaticResource UnitText}" VerticalAlignment="Center" />
+                            <TextBlock Text="增益" Style="{StaticResource StatusLabelText}"
+                                       VerticalAlignment="Center" Margin="16,0,8,0" />
+                            <TextBox Style="{StaticResource NumericInputBox}" Width="80"
+                                     Text="{Binding Gain, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Text="dB" Style="{StaticResource UnitText}"
+                                       VerticalAlignment="Center" Margin="8,0,0,0" />
+                            <Button Content="应 用" Style="{StaticResource SmallButton}"
+                                    Margin="16,0,0,0"
+                                    Command="{Binding ApplyCameraSettingsCommand}" />
+                        </StackPanel>
                     </Grid>
 
                     <!-- 预览图 + 识别结果 -->
@@ -82,9 +81,15 @@
                             <ColumnDefinition Width="340" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- 左：图像显示（Viewbox 自动缩放，Canvas 叠加 MARK 与 ROI） -->
+                        <!-- 左：图像显示（Viewbox 自动缩放，Canvas 叠加 MARK 与 ROI）+ 图例条 -->
                         <Border Grid.Column="0" Style="{StaticResource PanelBorder}" Padding="8" Margin="0,0,16,0">
-                            <Viewbox Stretch="Uniform">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                            <Viewbox Grid.Row="0" Stretch="Uniform">
                                 <Grid Width="{Binding PreviewWidth}" Height="{Binding PreviewHeight}">
                                     <Image Source="{Binding PreviewImage}" Stretch="Fill" />
                                     <Canvas Background="Transparent"
@@ -92,21 +97,25 @@
                                             MouseMove="OnPreviewMouseMove"
                                             MouseLeftButtonUp="OnPreviewMouseUp">
 
-                                        <!-- MARK1 搜索 ROI 框 -->
-                                        <Rectangle Canvas.Left="{Binding Mark1RoiX}"
-                                                   Canvas.Top="{Binding Mark1RoiY}"
-                                                   Width="{Binding Mark1RoiW}"
-                                                   Height="{Binding Mark1RoiH}"
+                                        <!-- 两个 MARK 共用的搜索区域（ROI）：只在这块范围内查找 MARK -->
+                                        <Rectangle Canvas.Left="{Binding SearchRoiX}"
+                                                   Canvas.Top="{Binding SearchRoiY}"
+                                                   Width="{Binding SearchRoiW}"
+                                                   Height="{Binding SearchRoiH}"
                                                    Stroke="{StaticResource StatusWait}"
-                                                   StrokeThickness="1" />
+                                                   StrokeThickness="2" />
 
-                                        <!-- MARK2 搜索 ROI 框 -->
-                                        <Rectangle Canvas.Left="{Binding Mark2RoiX}"
-                                                   Canvas.Top="{Binding Mark2RoiY}"
-                                                   Width="{Binding Mark2RoiW}"
-                                                   Height="{Binding Mark2RoiH}"
-                                                   Stroke="{StaticResource StatusWait}"
-                                                   StrokeThickness="1" />
+                                        <!-- ROI 名称标签：贴在框左上角内侧，深色底保证灰度图上可读 -->
+                                        <Border Canvas.Left="{Binding SearchRoiX}"
+                                                Canvas.Top="{Binding SearchRoiY}"
+                                                Background="{StaticResource BgMain}"
+                                                Opacity="0.8"
+                                                CornerRadius="{StaticResource ControlCornerRadius}"
+                                                Padding="6,2">
+                                            <TextBlock Text="搜索区域 ROI"
+                                                       Foreground="{StaticResource StatusWait}"
+                                                       FontSize="{StaticResource FontSizeUnit}" />
+                                        </Border>
 
                                         <!-- MARK1 十字（识别结果） -->
                                         <Path Data="M -20,0 L 20,0 M 0,-20 L 0,20"
@@ -140,10 +149,40 @@
                                     </Canvas>
                                 </Grid>
                             </Viewbox>
+
+                                <!-- 图例：黄框=搜索区域，绿十字=识别到的 MARK，蓝虚线=框选（裁模板用） -->
+                                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Rectangle Width="24" Height="16"
+                                               Stroke="{StaticResource StatusWait}" StrokeThickness="2"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Text="搜索区域"
+                                               Style="{StaticResource HintText}"
+                                               Margin="8,0,24,0" VerticalAlignment="Center" />
+
+                                    <Path Data="M -10,0 L 10,0 M 0,-10 L 0,10"
+                                          Width="24" Height="16" Stretch="Uniform"
+                                          Stroke="{StaticResource StatusRun}" StrokeThickness="2"
+                                          VerticalAlignment="Center" />
+                                    <TextBlock Text="识别到的 MARK 中心"
+                                               Style="{StaticResource HintText}"
+                                               Margin="8,0,24,0" VerticalAlignment="Center" />
+
+                                    <Rectangle Width="24" Height="16"
+                                               Stroke="{StaticResource StatusInfo}" StrokeThickness="2"
+                                               StrokeDashArray="4,3"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Text="框选（仅裁模板用）"
+                                               Style="{StaticResource HintText}"
+                                               Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
                         </Border>
 
-                        <!-- 右：识别结果 -->
-                        <StackPanel Grid.Column="1">
+                        <!-- 右：识别结果（面板较多，窗口高度不足时可滚动） -->
+                        <ScrollViewer Grid.Column="1"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
                             <Border Style="{StaticResource PanelBorder}">
                                 <StackPanel>
                                     <TextBlock Text="识别结果" Style="{StaticResource GroupTitleText}" />
@@ -167,36 +206,42 @@
 
                             <Border Style="{StaticResource PanelBorder}" Margin="0,16,0,0">
                                 <StackPanel>
-                                    <TextBlock Text="模板制作（框选 ROI 后保存）" Style="{StaticResource GroupTitleText}" />
-                                    <UniformGrid Columns="2" Margin="0,8,0,0">
+                                    <TextBlock Text="模板制作" Style="{StaticResource GroupTitleText}" />
+                                    <TextBlock Text="先拍照，再在图上框选 MARK 区域后保存"
+                                               Style="{StaticResource HintText}"
+                                               Margin="0,8,0,0" TextWrapping="Wrap" />
+                                    <UniformGrid Columns="1" Margin="0,8,0,0">
                                         <Button Content="保存 MARK1 模板" Style="{StaticResource SmallButton}"
-                                                Margin="0,0,8,0" Command="{Binding SaveMark1TemplateCommand}" />
+                                                Margin="0,0,0,8" Command="{Binding SaveMark1TemplateCommand}" />
                                         <Button Content="保存 MARK2 模板" Style="{StaticResource SmallButton}"
                                                 Command="{Binding SaveMark2TemplateCommand}" />
                                     </UniformGrid>
+                                    <TextBlock Text="框选只用于裁剪模板，不会改动搜索区域"
+                                               Style="{StaticResource HintText}"
+                                               Margin="0,8,0,0" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
-                        </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Grid>
 
                     <!-- 底部：操作按钮 + 状态 -->
                     <Grid Grid.Row="2" Margin="0,16,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <Button Grid.Column="0" Content="拍照" Style="{StaticResource SmallButton}"
-                                Command="{Binding CaptureOnceCommand}" />
-                        <Button Grid.Column="1" Content="{Binding PreviewToggleText}" Style="{StaticResource SmallButton}"
-                                Margin="8,0,0,0" Command="{Binding TogglePreviewCommand}" />
-                        <Button Grid.Column="2" Content="注入偏移" Style="{StaticResource SmallButton}"
-                                Margin="8,0,0,0" Command="{Binding InjectOffsetDemoCommand}" />
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="拍 照" Style="{StaticResource NormalButton}"
+                                    MinHeight="{StaticResource ButtonPrimaryMinHeight}"
+                                    Command="{Binding TakePhotoCommand}" />
+                            <Button Content="识 别" Style="{StaticResource PrimaryButton}"
+                                    Margin="12,0,0,0"
+                                    Command="{Binding RecognizeCommand}" />
+                        </StackPanel>
 
-                        <TextBlock Grid.Column="4" Text="{Binding PreviewStatus}"
+                        <TextBlock Grid.Column="1" Text="{Binding PreviewStatus}"
                                    Style="{StaticResource StatusValueText}"
                                    HorizontalAlignment="Right"
                                    VerticalAlignment="Center" />
@@ -214,35 +259,34 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- 标定输入 -->
+                    <!-- 标定输入 + 操作按钮 -->
                     <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0" Text="标定区域中心" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="X" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" Margin="8,0,8,0" />
-                        <TextBox Grid.Column="2" Style="{StaticResource NumericInputBox}" Width="96"
-                                 Text="{Binding CalibrationCenterX, UpdateSourceTrigger=PropertyChanged}" />
-                        <TextBlock Grid.Column="3" Text="Y" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" Margin="16,0,8,0" />
-                        <TextBox Grid.Column="4" Style="{StaticResource NumericInputBox}" Width="96"
-                                 Text="{Binding CalibrationCenterY, UpdateSourceTrigger=PropertyChanged}" />
-                        <TextBlock Grid.Column="5" Text="步长(mm)" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" Margin="16,0,8,0" />
-                        <TextBox Grid.Column="6" Style="{StaticResource NumericInputBox}" Width="96" HorizontalAlignment="Left"
-                                 Text="{Binding CalibrationStep, UpdateSourceTrigger=PropertyChanged}" />
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="标定区域中心" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" />
+                            <TextBlock Text="X" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" Margin="8,0,8,0" />
+                            <TextBox Style="{StaticResource NumericInputBox}" Width="96"
+                                     Text="{Binding CalibrationCenterX, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Text="Y" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" Margin="16,0,8,0" />
+                            <TextBox Style="{StaticResource NumericInputBox}" Width="96"
+                                     Text="{Binding CalibrationCenterY, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Text="步长(mm)" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" Margin="16,0,8,0" />
+                            <TextBox Style="{StaticResource NumericInputBox}" Width="96"
+                                     Text="{Binding CalibrationStep, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
 
-                        <Button Grid.Column="6" Content="开始标定" Style="{StaticResource SmallButton}"
-                                HorizontalAlignment="Left" Margin="120,0,0,0"
-                                Command="{Binding StartCalibrationCommand}" />
-                        <Button Grid.Column="6" Content="停止" Style="{StaticResource DangerButton}"
-                                HorizontalAlignment="Left" Margin="224,0,0,0"
-                                Command="{Binding StopCalibrationCommand}" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="开始标定" Style="{StaticResource NormalButton}"
+                                    Command="{Binding StartCalibrationCommand}" />
+                            <Button Content="停 止" Style="{StaticResource DangerButton}"
+                                    MinWidth="{StaticResource ButtonSmallMinWidth}"
+                                    Margin="8,0,0,0"
+                                    Command="{Binding StopCalibrationCommand}" />
+                        </StackPanel>
                     </Grid>
 
                     <!-- 进度 -->

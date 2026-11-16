@@ -3,15 +3,16 @@
     层：App/Resources
     依赖：Colors.xaml（必须先合并 Colors.xaml，再合并本文件）
 -->
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:converters="clr-namespace:AutoTaping.App.Converters"
-                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="clr-namespace:AutoTaping.App.Converters"
+    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
-    <!-- 转换器定义在本字典内：IO 点位模板就在本文件，避免跨字典 StaticResource 解析顺序问题 -->
+    <!--  转换器定义在本字典内：IO 点位模板就在本文件，避免跨字典 StaticResource 解析顺序问题  -->
     <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
 
-    <!-- ===================== 字体与字号（07-UI设计规范 第 3 节） ===================== -->
+    <!--  ===================== 字体与字号（07-UI设计规范 第 3 节） =====================  -->
     <FontFamily x:Key="FontFamilyBase">Microsoft YaHei</FontFamily>
     <FontFamily x:Key="FontFamilyNumeric">Consolas</FontFamily>
 
@@ -23,21 +24,21 @@
     <sys:Double x:Key="FontSizeHint">16</sys:Double>
     <sys:Double x:Key="FontSizeButtonPrimary">24</sys:Double>
 
-    <!-- ===================== 尺寸与间距（07-UI设计规范 第 4 节：间距只用 8 / 16 / 24） ===================== -->
+    <!--  ===================== 尺寸与间距（07-UI设计规范 第 4 节：间距只用 8 / 16 / 24） =====================  -->
     <sys:Double x:Key="ButtonPrimaryMinWidth">160</sys:Double>
     <sys:Double x:Key="ButtonPrimaryMinHeight">72</sys:Double>
     <sys:Double x:Key="ButtonMinWidth">120</sys:Double>
     <sys:Double x:Key="ButtonMinHeight">56</sys:Double>
     <sys:Double x:Key="InputMinHeight">48</sys:Double>
 
-    <!-- 主窗口尺寸：设计基准 1280×1024（07-UI设计规范 开头） -->
+    <!--  主窗口尺寸：设计基准 1280×1024（07-UI设计规范 开头）  -->
     <sys:Double x:Key="MainWindowWidth">1280</sys:Double>
     <sys:Double x:Key="MainWindowHeight">1024</sys:Double>
     <sys:Double x:Key="MainWindowMinWidth">1024</sys:Double>
     <sys:Double x:Key="MainWindowMinHeight">768</sys:Double>
 
-    <!-- 主窗口壳各区域尺寸（07-UI设计规范 第 5.1 节） -->
-    <!-- 行高/列宽必须用 GridLength：Grid 的 Height/Width 不接受 Double，直接用 Double 会在加载 XAML 时抛异常 -->
+    <!--  主窗口壳各区域尺寸（07-UI设计规范 第 5.1 节）  -->
+    <!--  行高/列宽必须用 GridLength：Grid 的 Height/Width 不接受 Double，直接用 Double 会在加载 XAML 时抛异常  -->
     <GridLength x:Key="StatusBarRowHeight">64</GridLength>
     <GridLength x:Key="OperationBarRowHeight">96</GridLength>
     <GridLength x:Key="NavColumnWidth">120</GridLength>
@@ -56,7 +57,7 @@
 
     <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
 
-    <!-- ===================== 文本（默认样式，页面里不要重复设置字号） ===================== -->
+    <!--  ===================== 文本（默认样式，页面里不要重复设置字号） =====================  -->
     <Style TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource FontFamilyBase}" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
@@ -64,34 +65,49 @@
         <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
     </Style>
 
-    <Style x:Key="PageTitleText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <Style
+        x:Key="PageTitleText"
+        BasedOn="{StaticResource {x:Type TextBlock}}"
+        TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource FontSizePageTitle}" />
         <Setter Property="FontWeight" Value="Bold" />
     </Style>
 
-    <Style x:Key="GroupTitleText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <Style
+        x:Key="GroupTitleText"
+        BasedOn="{StaticResource {x:Type TextBlock}}"
+        TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource FontSizeGroupTitle}" />
         <Setter Property="FontWeight" Value="Bold" />
     </Style>
 
-    <!-- 关键数值：等宽字体，实时刷新时数字不跳动（07-UI设计规范 第 3 节） -->
-    <Style x:Key="NumericText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <!--  关键数值：等宽字体，实时刷新时数字不跳动（07-UI设计规范 第 3 节）  -->
+    <Style
+        x:Key="NumericText"
+        BasedOn="{StaticResource {x:Type TextBlock}}"
+        TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource FontFamilyNumeric}" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeNumeric}" />
         <Setter Property="FontWeight" Value="Bold" />
     </Style>
 
-    <Style x:Key="UnitText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <Style
+        x:Key="UnitText"
+        BasedOn="{StaticResource {x:Type TextBlock}}"
+        TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource FontSizeUnit}" />
         <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
     </Style>
 
-    <Style x:Key="HintText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <Style
+        x:Key="HintText"
+        BasedOn="{StaticResource {x:Type TextBlock}}"
+        TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource FontSizeHint}" />
         <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
     </Style>
 
-    <!-- ===================== 输入框（高度 48，深色主题） ===================== -->
+    <!--  ===================== 输入框（高度 48，深色主题） =====================  -->
     <Style TargetType="TextBox">
         <Setter Property="MinHeight" Value="{StaticResource InputMinHeight}" />
         <Setter Property="FontFamily" Value="{StaticResource FontFamilyBase}" />
@@ -105,9 +121,11 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
-    <!-- ===================== 按钮：普通（默认） ===================== -->
-    <!-- 说明：07 文档色板只定义了 BtnPrimaryHover，未定义普通/危险按钮的悬停色，
-         为避免自行发明颜色（禁止装饰性用色），这两个按钮不做悬停变色，只做禁用态区分。 -->
+    <!--  ===================== 按钮：普通（默认） =====================  -->
+    <!--
+        说明：07 文档色板只定义了 BtnPrimaryHover，未定义普通/危险按钮的悬停色，
+        为避免自行发明颜色（禁止装饰性用色），这两个按钮不做悬停变色，只做禁用态区分。
+    -->
     <Style x:Key="NormalButton" TargetType="Button">
         <Setter Property="MinWidth" Value="{StaticResource ButtonMinWidth}" />
         <Setter Property="MinHeight" Value="{StaticResource ButtonMinHeight}" />
@@ -119,13 +137,15 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource ControlCornerRadius}">
-                        <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Margin="{StaticResource SpacingSmall}" />
+                    <Border
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{StaticResource ControlCornerRadius}">
+                        <ContentPresenter
+                            Margin="{StaticResource SpacingSmall}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsEnabled" Value="False">
@@ -139,10 +159,10 @@
         </Setter>
     </Style>
 
-    <!-- 未指定样式时使用普通按钮外观 -->
-    <Style TargetType="Button" BasedOn="{StaticResource NormalButton}" />
+    <!--  未指定样式时使用普通按钮外观  -->
+    <Style BasedOn="{StaticResource NormalButton}" TargetType="Button" />
 
-    <!-- ===================== 按钮：主操作（启动等） ===================== -->
+    <!--  ===================== 按钮：主操作（启动等） =====================  -->
     <Style x:Key="PrimaryButton" TargetType="Button">
         <Setter Property="MinWidth" Value="{StaticResource ButtonPrimaryMinWidth}" />
         <Setter Property="MinHeight" Value="{StaticResource ButtonPrimaryMinHeight}" />
@@ -155,13 +175,15 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource ControlCornerRadius}">
-                        <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Margin="{StaticResource SpacingSmall}" />
+                    <Border
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{StaticResource ControlCornerRadius}">
+                        <ContentPresenter
+                            Margin="{StaticResource SpacingSmall}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -180,7 +202,7 @@
         </Setter>
     </Style>
 
-    <!-- ===================== 按钮：危险操作（停止 / 复位） ===================== -->
+    <!--  ===================== 按钮：危险操作（停止 / 复位） =====================  -->
     <Style x:Key="DangerButton" TargetType="Button">
         <Setter Property="MinWidth" Value="{StaticResource ButtonMinWidth}" />
         <Setter Property="MinHeight" Value="{StaticResource ButtonMinHeight}" />
@@ -193,13 +215,15 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource ControlCornerRadius}">
-                        <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Margin="{StaticResource SpacingSmall}" />
+                    <Border
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{StaticResource ControlCornerRadius}">
+                        <ContentPresenter
+                            Margin="{StaticResource SpacingSmall}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsEnabled" Value="False">
@@ -212,7 +236,7 @@
         </Setter>
     </Style>
 
-    <!-- ===================== 口令输入框（登录框用，高度 48，外观与 TextBox 一致） ===================== -->
+    <!--  ===================== 口令输入框（登录框用，高度 48，外观与 TextBox 一致） =====================  -->
     <Style TargetType="PasswordBox">
         <Setter Property="MinHeight" Value="{StaticResource InputMinHeight}" />
         <Setter Property="FontFamily" Value="{StaticResource FontFamilyBase}" />
@@ -226,19 +250,57 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
-    <!-- ===================== 小按钮（88×48，面板内操作，07-UI设计规范 第 4 节） ===================== -->
+    <!--  ===================== 小按钮（88×48，面板内操作，07-UI设计规范 第 4 节） =====================  -->
     <sys:Double x:Key="ButtonSmallMinWidth">88</sys:Double>
     <sys:Double x:Key="ButtonSmallMinHeight">48</sys:Double>
     <sys:Double x:Key="IoPointTileMinHeight">80</sys:Double>
 
-    <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource NormalButton}">
+    <Style
+        x:Key="SmallButton"
+        BasedOn="{StaticResource NormalButton}"
+        TargetType="Button">
         <Setter Property="MinWidth" Value="{StaticResource ButtonSmallMinWidth}" />
         <Setter Property="MinHeight" Value="{StaticResource ButtonSmallMinHeight}" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
         <Setter Property="Padding" Value="8,0" />
     </Style>
 
-    <!-- ===================== 页面内分组面板（统一外观，View 里不再重复写背景/边框） ===================== -->
+    <!--  ===================== 选项卡（深色；选中项用卡片底 + 信息色下划线） =====================  -->
+    <Style TargetType="TabItem">
+        <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="FontFamily" Value="{StaticResource FontFamilyBase}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border
+                        x:Name="TabBorder"
+                        Margin="0,0,4,0"
+                        Padding="16,8"
+                        Background="Transparent"
+                        BorderBrush="Transparent"
+                        BorderThickness="0,0,0,2">
+                        <ContentPresenter
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            ContentSource="Header" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource BgCard}" />
+                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource StatusInfo}" />
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--  ===================== 页面内分组面板（统一外观，View 里不再重复写背景/边框） =====================  -->
     <Style x:Key="PanelBorder" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource BgPanel}" />
         <Setter Property="BorderBrush" Value="{StaticResource BorderNormal}" />
@@ -247,14 +309,20 @@
         <Setter Property="Padding" Value="{StaticResource SpacingMedium}" />
     </Style>
 
-    <!-- ===================== 数值输入框（等宽字体，右对齐） ===================== -->
-    <Style x:Key="NumericInputBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+    <!--  ===================== 数值输入框（等宽字体，右对齐） =====================  -->
+    <Style
+        x:Key="NumericInputBox"
+        BasedOn="{StaticResource {x:Type TextBox}}"
+        TargetType="TextBox">
         <Setter Property="FontFamily" Value="{StaticResource FontFamilyNumeric}" />
         <Setter Property="HorizontalContentAlignment" Value="Right" />
     </Style>
 
-    <!-- 目标位置输入框：超软限位时红框（08-页面清单 页面 2 交互规则） -->
-    <Style x:Key="TargetInputBox" TargetType="TextBox" BasedOn="{StaticResource NumericInputBox}">
+    <!--  目标位置输入框：超软限位时红框（08-页面清单 页面 2 交互规则）  -->
+    <Style
+        x:Key="TargetInputBox"
+        BasedOn="{StaticResource NumericInputBox}"
+        TargetType="TextBox">
         <Style.Triggers>
             <DataTrigger Binding="{Binding HasTargetError}" Value="True">
                 <Setter Property="BorderBrush" Value="{StaticResource StatusAlarm}" />
@@ -263,7 +331,7 @@
         </Style.Triggers>
     </Style>
 
-    <!-- ===================== IO 点位方块（绿 = ON，深灰 = OFF，强制 = 黄边框） ===================== -->
+    <!--  ===================== IO 点位方块（绿 = ON，深灰 = OFF，强制 = 黄边框） =====================  -->
     <Style x:Key="IoPointTile" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource BgCard}" />
         <Setter Property="BorderBrush" Value="{StaticResource BorderNormal}" />
@@ -290,31 +358,35 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0"
-                               Text="{Binding Point}"
-                               FontFamily="{StaticResource FontFamilyNumeric}"
-                               FontSize="{StaticResource FontSizeBody}"
-                               FontWeight="Bold" />
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding StateText}"
-                               FontFamily="{StaticResource FontFamilyNumeric}"
-                               FontSize="{StaticResource FontSizeHint}"
-                               FontWeight="Bold"
-                               VerticalAlignment="Center" />
+                    <TextBlock
+                        Grid.Column="0"
+                        FontFamily="{StaticResource FontFamilyNumeric}"
+                        FontSize="{StaticResource FontSizeBody}"
+                        FontWeight="Bold"
+                        Text="{Binding Point}" />
+                    <TextBlock
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        FontFamily="{StaticResource FontFamilyNumeric}"
+                        FontSize="{StaticResource FontSizeHint}"
+                        FontWeight="Bold"
+                        Text="{Binding StateText}" />
                 </Grid>
-                <TextBlock Text="{Binding DisplayName}"
-                           FontSize="{StaticResource FontSizeHint}"
-                           TextWrapping="Wrap"
-                           Margin="0,4,0,0" />
-                <TextBlock Text="强制"
-                           FontSize="{StaticResource FontSizeHint}"
-                           Foreground="{StaticResource StatusWait}"
-                           Visibility="{Binding IsForced, Converter={StaticResource BoolToVisibility}}" />
+                <TextBlock
+                    Margin="0,4,0,0"
+                    FontSize="{StaticResource FontSizeHint}"
+                    Text="{Binding DisplayName}"
+                    TextWrapping="Wrap" />
+                <TextBlock
+                    FontSize="{StaticResource FontSizeHint}"
+                    Foreground="{StaticResource StatusWait}"
+                    Text="强制"
+                    Visibility="{Binding IsForced, Converter={StaticResource BoolToVisibility}}" />
             </StackPanel>
         </Border>
     </DataTemplate>
 
-    <!-- ===================== 下拉框（高度 48，深色主题；仅设外观，不改系统模板） ===================== -->
+    <!--  ===================== 下拉框（高度 48，深色主题；仅设外观，不改系统模板） =====================  -->
     <Style TargetType="ComboBox">
         <Setter Property="MinHeight" Value="{StaticResource InputMinHeight}" />
         <Setter Property="MinWidth" Value="{StaticResource ButtonMinWidth}" />
@@ -327,21 +399,27 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
-    <!-- ===================== 状态栏文字（07-UI设计规范 第 5.1 节） ===================== -->
-    <Style x:Key="StatusLabelText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <!--  ===================== 状态栏文字（07-UI设计规范 第 5.1 节） =====================  -->
+    <Style
+        x:Key="StatusLabelText"
+        BasedOn="{StaticResource {x:Type TextBlock}}"
+        TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource FontSizeUnit}" />
         <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <Style x:Key="StatusValueText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <Style
+        x:Key="StatusValueText"
+        BasedOn="{StaticResource {x:Type TextBlock}}"
+        TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Margin" Value="8,0,0,0" />
     </Style>
 
-    <!-- ===================== 导航按钮（120×72，图标 + 文字，07-UI设计规范 第 5.2 节） ===================== -->
-    <!-- 权限不足时置灰但仍可点击：点击由 ShellViewModel 提示需要什么角色（08 全局交互约定） -->
+    <!--  ===================== 导航按钮（120×72，图标 + 文字，07-UI设计规范 第 5.2 节） =====================  -->
+    <!--  权限不足时置灰但仍可点击：点击由 ShellViewModel 提示需要什么角色（08 全局交互约定）  -->
     <Style x:Key="NavButton" TargetType="Button">
         <Setter Property="Width" Value="{StaticResource NavButtonWidth}" />
         <Setter Property="Height" Value="{StaticResource NavButtonHeight}" />
@@ -352,29 +430,32 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}">
+                    <Border
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}">
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Icon}"
-                                       FontSize="{StaticResource FontSizeNavIcon}"
-                                       Foreground="{TemplateBinding Foreground}"
-                                       HorizontalAlignment="Center" />
-                            <TextBlock Text="{Binding Title}"
-                                       FontSize="{StaticResource FontSizeNavLabel}"
-                                       Foreground="{TemplateBinding Foreground}"
-                                       HorizontalAlignment="Center" />
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="{StaticResource FontSizeNavIcon}"
+                                Foreground="{TemplateBinding Foreground}"
+                                Text="{Binding Icon}" />
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="{StaticResource FontSizeNavLabel}"
+                                Foreground="{TemplateBinding Foreground}"
+                                Text="{Binding Title}" />
                         </StackPanel>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Background" Value="{StaticResource BgCard}" />
                         </Trigger>
-                        <!-- 选中态用 StatusInfo（信息色 = 选中，07-UI设计规范 2.3） -->
+                        <!--  选中态用 StatusInfo（信息色 = 选中，07-UI设计规范 2.3）  -->
                         <DataTrigger Binding="{Binding IsSelected}" Value="True">
                             <Setter Property="Background" Value="{StaticResource StatusInfo}" />
                         </DataTrigger>
-                        <!-- 权限不足：置灰（必须明显可见，07-UI设计规范 9.3） -->
+                        <!--  权限不足：置灰（必须明显可见，07-UI设计规范 9.3）  -->
                         <DataTrigger Binding="{Binding IsAllowed}" Value="False">
                             <Setter Property="Background" Value="{StaticResource BtnDisabled}" />
                             <Setter Property="Foreground" Value="{StaticResource TextDisabled}" />
@@ -385,7 +466,7 @@
         </Setter>
     </Style>
 
-    <!-- ===================== 表格（报警页 / 产量页，深色主题；不引入任何第三方表格库） ===================== -->
+    <!--  ===================== 表格（报警页 / 产量页，深色主题；不引入任何第三方表格库） =====================  -->
     <sys:Double x:Key="DataGridRowHeight">44</sys:Double>
     <sys:Double x:Key="DataGridHeaderHeight">44</sys:Double>
     <sys:Double x:Key="CardValueFontSize">32</sys:Double>
@@ -414,10 +495,11 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="DataGridCell">
-                    <Border Background="{TemplateBinding Background}"
-                            BorderBrush="{StaticResource BorderNormal}"
-                            BorderThickness="0,0,1,0"
-                            Padding="{TemplateBinding Padding}">
+                    <Border
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{StaticResource BorderNormal}"
+                        BorderThickness="0,0,1,0">
                         <ContentPresenter VerticalAlignment="Center" />
                     </Border>
                 </ControlTemplate>
@@ -431,7 +513,7 @@
         </Style.Triggers>
     </Style>
 
-    <!-- 行高由 DataGrid.RowHeight 控制：RowStyle 里设 Height 会覆盖单个表格的 RowHeight 覆盖值 -->
+    <!--  行高由 DataGrid.RowHeight 控制：RowStyle 里设 Height 会覆盖单个表格的 RowHeight 覆盖值  -->
     <Style x:Key="GridRowStyle" TargetType="DataGridRow">
         <Setter Property="Background" Value="{StaticResource BgPanel}" />
         <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
@@ -462,8 +544,11 @@
         <Setter Property="FontSize" Value="{StaticResource FontSizeHint}" />
     </Style>
 
-    <!-- ===================== 参数页输入框（超范围红框，08-页面清单 页面 3） ===================== -->
-    <Style x:Key="ParameterInputBox" TargetType="TextBox" BasedOn="{StaticResource NumericInputBox}">
+    <!--  ===================== 参数页输入框（超范围红框，08-页面清单 页面 3） =====================  -->
+    <Style
+        x:Key="ParameterInputBox"
+        BasedOn="{StaticResource NumericInputBox}"
+        TargetType="TextBox">
         <Style.Triggers>
             <DataTrigger Binding="{Binding HasError}" Value="True">
                 <Setter Property="BorderBrush" Value="{StaticResource StatusAlarm}" />
@@ -472,20 +557,26 @@
         </Style.Triggers>
     </Style>
 
-    <!-- ===================== 统计卡片（产量页四个数字卡片） ===================== -->
-    <Style x:Key="CardTitleText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <!--  ===================== 统计卡片（产量页四个数字卡片） =====================  -->
+    <Style
+        x:Key="CardTitleText"
+        BasedOn="{StaticResource {x:Type TextBlock}}"
+        TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource FontSizeUnit}" />
         <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
     </Style>
 
-    <Style x:Key="CardValueText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <Style
+        x:Key="CardValueText"
+        BasedOn="{StaticResource {x:Type TextBlock}}"
+        TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource FontFamilyNumeric}" />
         <Setter Property="FontSize" Value="{StaticResource CardValueFontSize}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="Margin" Value="0,4,0,0" />
     </Style>
 
-    <!-- ===================== 报警徽标（状态栏未确认报警数，红底白字，07-UI设计规范 第 5.1 节） ===================== -->
+    <!--  ===================== 报警徽标（状态栏未确认报警数，红底白字，07-UI设计规范 第 5.1 节） =====================  -->
     <Style x:Key="AlarmBadgeButton" TargetType="Button">
         <Setter Property="MinWidth" Value="88" />
         <Setter Property="Height" Value="{StaticResource AlarmBadgeHeight}" />
@@ -497,11 +588,11 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            CornerRadius="{StaticResource ControlCornerRadius}">
-                        <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Margin="{StaticResource SpacingSmall}" />
+                    <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource ControlCornerRadius}">
+                        <ContentPresenter
+                            Margin="{StaticResource SpacingSmall}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <DataTrigger Binding="{Binding UnackedAlarmCount}" Value="0">

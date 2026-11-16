@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>SampleGen</RootNamespace>
+    <!-- 独立控制台工具：不加入 AutoTaping.sln，不影响主解决方案的构建/测试基线 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 与 AutoTaping.Vision 同版本，复用根目录 packages-local 离线包 -->
+    <PackageReference Include="OpenCvSharp4" Version="4.10.0.20241108" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20241108" />
+  </ItemGroup>
+
+</Project>

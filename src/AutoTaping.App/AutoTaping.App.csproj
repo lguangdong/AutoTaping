@@ -36,6 +36,11 @@
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+
+    <!-- 虚拟相机样本图：tools/SampleGen 生成后复制到输出目录 images/samples（源目录为空时不复制） -->
+    <None Include="..\..\tools\SampleGen\sample\*.png"
+          Link="images\samples\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

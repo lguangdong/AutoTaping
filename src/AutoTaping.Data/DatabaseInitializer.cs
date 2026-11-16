@@ -64,12 +64,66 @@ public sealed class DatabaseInitializer
             var adminCreated = SeedAdminUser(connection, transaction);
             var recipeCreated = SeedSampleRecipe(connection, transaction);
             var calibrationCreated = SeedSampleCalibration(connection, transaction);
+            var normalizedRecipes = NormalizeRecipeJson(connection, transaction);
             transaction.Commit();
 
             _log.LogInformation(
                 "数据库初始化完成：路径 {Path}，新建库 {IsNew}，日志模式 {JournalMode}，种子 admin 用户 {AdminCreated}，种子配方 {RecipeCreated}，种子标定 {CalibrationCreated}",
                 _connectionFactory.DatabasePath, isNewDatabase, journalMode, adminCreated, recipeCreated, calibrationCreated);
+
+            if (normalizedRecipes > 0)
+            {
+                _log.LogInformation("已规整 {Count} 条配方 JSON（清理已废弃的字段键）", normalizedRecipes);
+            }
         }
+    }
+
+    /// <summary>
+    /// 规整配方 JSON：用当前模型重新序列化，清除历史遗留的废弃键（如旧的两块搜索区域、tapePath）。
+    /// 幂等——内容无变化不写库；解析失败的配方保持原样，避免破坏用户数据。
+    /// </summary>
+    /// <param name="connection">数据库连接（调用方已开事务）。</param>
+    /// <param name="transaction">当前事务。</param>
+    /// <returns>被改写的配方条数。</returns>
+    private static int NormalizeRecipeJson(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        var rows = connection.Query<RecipeJsonRow>(
+            "SELECT Id, JsonData FROM Recipe;", transaction: transaction).ToList();
+
+        var updated = 0;
+        foreach (var row in rows)
+        {
+            var parameters = RecipeJson.TryDeserialize(row.JsonData);
+            if (parameters is null)
+            {
+                continue;
+            }
+
+            var normalized = RecipeJson.Serialize(parameters);
+            if (string.Equals(normalized, row.JsonData, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            connection.Execute(
+                "UPDATE Recipe SET JsonData = @JsonData WHERE Id = @Id;",
+                new { row.Id, JsonData = normalized },
+                transaction);
+
+            updated++;
+        }
+
+        return updated;
+    }
+
+    /// <summary>配方 JSON 列的投影（仅用于规整）。</summary>
+    private sealed class RecipeJsonRow
+    {
+        /// <summary>配方主键。</summary>
+        public int Id { get; set; }
+
+        /// <summary>配方参数 JSON 文本。</summary>
+        public string JsonData { get; set; } = string.Empty;
     }
 
     /// <summary>开启 WAL 并返回实际生效的日志模式（网络盘等场景可能退回 delete）。</summary>

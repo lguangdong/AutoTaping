@@ -58,6 +58,16 @@ public static class ParameterCatalog
         new("templateMark1V", "MARK1 基准 V", "px", ParameterGroup.Vision, 0, ImageHeightPx, 500.0, 1),
         new("templateMark2U", "MARK2 基准 U", "px", ParameterGroup.Vision, 0, ImageWidthPx, 880.0, 1),
         new("templateMark2V", "MARK2 基准 V", "px", ParameterGroup.Vision, 0, ImageHeightPx, 500.0, 1),
+        new("searchRoiX", "搜索区域 X", "px", ParameterGroup.Vision, 0, ImageWidthPx, 300, 0),
+        new("searchRoiY", "搜索区域 Y", "px", ParameterGroup.Vision, 0, ImageHeightPx, 400, 0),
+        new("searchRoiW", "搜索区域宽", "px", ParameterGroup.Vision, 16, ImageWidthPx, 680, 0),
+        new("searchRoiH", "搜索区域高", "px", ParameterGroup.Vision, 16, ImageHeightPx, 200, 0),
+        new("mark1RadiusPx", "MARK1 半径", "px", ParameterGroup.Vision, 3, 120, 15.0, 1,
+            Permission.RecipeEdit, "大圆；与 MARK2 半径至少差 4px 才能可靠区分身份"),
+        new("mark2RadiusPx", "MARK2 半径", "px", ParameterGroup.Vision, 3, 120, 9.0, 1,
+            Permission.RecipeEdit, "小圆；与 MARK1 半径至少差 4px 才能可靠区分身份"),
+        new("markDistanceTolerancePx", "MARK 间距容差", "px", ParameterGroup.Vision, 0, 200, 20.0, 1,
+            Permission.RecipeEdit, "实测两点间距偏离标称值超过它即判识别失败"),
         new("matchThreshold", "匹配阈值", "", ParameterGroup.Vision, 0.5, 0.95, 0.7, 2,
             Permission.RecipeEdit, "过低会误识别，过高会频繁失败"),
         new("maxDeltaXMm", "ΔX 上限", "mm", ParameterGroup.Vision, 1, 20, 5.0, 1,
@@ -121,6 +131,13 @@ public static class ParameterCatalog
             case "templateMark1V": value = parameters.Vision.TemplateMark1V; return true;
             case "templateMark2U": value = parameters.Vision.TemplateMark2U; return true;
             case "templateMark2V": value = parameters.Vision.TemplateMark2V; return true;
+            case "searchRoiX": value = parameters.Vision.SearchRoi.X; return true;
+            case "searchRoiY": value = parameters.Vision.SearchRoi.Y; return true;
+            case "searchRoiW": value = parameters.Vision.SearchRoi.W; return true;
+            case "searchRoiH": value = parameters.Vision.SearchRoi.H; return true;
+            case "mark1RadiusPx": value = parameters.Vision.Mark1RadiusPx; return true;
+            case "mark2RadiusPx": value = parameters.Vision.Mark2RadiusPx; return true;
+            case "markDistanceTolerancePx": value = parameters.Vision.MarkDistanceTolerancePx; return true;
             case "matchThreshold": value = parameters.Vision.MatchThreshold; return true;
             case "maxDeltaXMm": value = parameters.Vision.MaxDeltaXMm; return true;
             case "maxDeltaYMm": value = parameters.Vision.MaxDeltaYMm; return true;
@@ -171,6 +188,13 @@ public static class ParameterCatalog
             case "templateMark1V": parameters.Vision.TemplateMark1V = value; return true;
             case "templateMark2U": parameters.Vision.TemplateMark2U = value; return true;
             case "templateMark2V": parameters.Vision.TemplateMark2V = value; return true;
+            case "searchRoiX": parameters.Vision.SearchRoi = parameters.Vision.SearchRoi with { X = ToInt(value) }; return true;
+            case "searchRoiY": parameters.Vision.SearchRoi = parameters.Vision.SearchRoi with { Y = ToInt(value) }; return true;
+            case "searchRoiW": parameters.Vision.SearchRoi = parameters.Vision.SearchRoi with { W = ToInt(value) }; return true;
+            case "searchRoiH": parameters.Vision.SearchRoi = parameters.Vision.SearchRoi with { H = ToInt(value) }; return true;
+            case "mark1RadiusPx": parameters.Vision.Mark1RadiusPx = value; return true;
+            case "mark2RadiusPx": parameters.Vision.Mark2RadiusPx = value; return true;
+            case "markDistanceTolerancePx": parameters.Vision.MarkDistanceTolerancePx = value; return true;
             case "matchThreshold": parameters.Vision.MatchThreshold = value; return true;
             case "maxDeltaXMm": parameters.Vision.MaxDeltaXMm = value; return true;
             case "maxDeltaYMm": parameters.Vision.MaxDeltaYMm = value; return true;

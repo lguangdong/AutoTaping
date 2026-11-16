@@ -28,8 +28,11 @@ public sealed class TemplateMatcherTests
         var result = matcher.Match(image, new Rect(0, 0, 1280, 1024), 0.5);
 
         Assert.NotNull(result);
-        Assert.Equal(400.0, result.Value.Center.X, 1);
-        Assert.Equal(500.0, result.Value.Center.Y, 1);
+
+        // 模板边长 80 → 中心约定为 (80-1)/2 = 39.5；十字线宽 2 居中画在 (400,500)，
+        // 墨迹在"像素索引"空间的中心即 (399.5, 499.5)，容差 1px 内即可
+        Assert.InRange(result.Value.Center.X, 399.0, 400.0);
+        Assert.InRange(result.Value.Center.Y, 499.0, 500.0);
         Assert.True(result.Value.Score > 0.9, $"匹配分应接近 1，实际 {result.Value.Score:F3}");
     }
 
@@ -41,6 +44,23 @@ public sealed class TemplateMatcherTests
         using var matcher = new TemplateMatcher();
 
         var result = matcher.Match(image, new Rect(0, 0, 1280, 1024), 0.5);
+
+        Assert.Null(result);
+    }
+
+    /// <summary>搜索区域与模板同尺寸（result 1×1）时返回 null —— 只有唯一候选位置，结果没有意义。</summary>
+    [Fact]
+    public void Match_ReturnsNull_WhenSearchAreaEqualsTemplate()
+    {
+        using var image = new Mat(1024, 1280, MatType.CV_8UC1, Scalar.All(40));
+        Cv2.DrawMarker(image, new Point(400, 500), Scalar.White, MarkerTypes.Cross, 40, 2);
+
+        using var template = new Mat(image, new Rect(360, 460, 80, 80)).Clone();
+        using var matcher = new TemplateMatcher();
+        matcher.LoadTemplate(template);
+
+        // 搜索区 = 刚裁模板的那块区域：不做防御时会返回"满分 + 区域中心"，属于静默错误
+        var result = matcher.Match(image, new Rect(360, 460, 80, 80), 0.5);
 
         Assert.Null(result);
     }

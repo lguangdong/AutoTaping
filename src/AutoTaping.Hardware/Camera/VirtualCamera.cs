@@ -1,4 +1,4 @@
-// 职责：虚拟相机——生成带 MARK 的合成灰度图并按 ±5px 注入随机偏移，供无硬件开发与视觉纠偏演示
+// 职责：虚拟相机——优先从样本图目录随机取一帧灰度图，无样本图或标定态时生成带 MARK 的合成图
 // 层：Hardware/Camera
 // 依赖：ICamera（Core/Abstractions）、ILogger
 
@@ -9,7 +9,9 @@ namespace AutoTaping.Hardware.Camera;
 
 /// <summary>
 /// <see cref="ICamera"/> 的虚拟实现。行为遵循 <c>docs/03-硬件对接-海康相机.md</c> 第 4 节：
-/// 生成噪声底 + 两个十字 MARK 的合成图，每次取图随机平移 MARK ±5px，模拟 80–150ms 取图耗时。
+/// 每次取图先尝试从「样本图提供者」随机取一帧真实感的模拟采样图（不同工件姿态）；
+/// 无样本图可用、或处于「平台位置模拟」状态（九点标定需要确定性的像素-平台关系）时，
+/// 退化为生成噪声底 + 两个实心圆 MARK 的合成图。两种模式都模拟 80–150ms 取图耗时。
 /// </summary>
 public sealed class VirtualCamera : ICamera
 {
@@ -31,9 +33,6 @@ public sealed class VirtualCamera : ICamera
     /// <summary>MARK2 基准 Y（像素）。</summary>
     private const int DefaultMark2Y = 500;
 
-    /// <summary>随机偏移最大值（像素），±5px（03 文档 4.1）。</summary>
-    private const int MaxRandomOffset = 5;
-
     /// <summary>模拟取图耗时下限（ms）。</summary>
     private const int GrabDelayMinMs = 80;
 
@@ -46,11 +45,11 @@ public sealed class VirtualCamera : ICamera
     /// <summary>MARK 灰度值。</summary>
     private const byte MarkGray = 255;
 
-    /// <summary>十字 MARK 半臂长（像素）。</summary>
-    private const int MarkHalfSize = 20;
+    /// <summary>实心圆 MARK1 半径（像素，大圆，直径 31）。</summary>
+    private const int Mark1Radius = 15;
 
-    /// <summary>十字 MARK 线宽（像素）。</summary>
-    private const int MarkThickness = 2;
+    /// <summary>实心圆 MARK2 半径（像素，小圆，直径 19）：与 MARK1 差 6px，靠直径区分身份。</summary>
+    private const int Mark2Radius = 9;
 
     /// <summary>模拟标定映射的基准平台 X（mm），对应配方默认拍照位 X（见 06 文档位置参数）。</summary>
     private const double SimCalibBasePlatformX = 150.0;
@@ -72,11 +71,11 @@ public sealed class VirtualCamera : ICamera
     private readonly ILogger<VirtualCamera> _log;
     private readonly object _sync = new();
 
+    /// <summary>样本图提供者（返回一帧 Mono8 数据与尺寸）；<see langword="null"/> 表示只用合成图。</summary>
+    private readonly Func<(byte[] Mono8, int Width, int Height)?>? _sampleProvider;
+
     private bool _initialized;
     private bool _isGrabbing;
-    private bool _hasInjectedOffset;
-    private int _injectedOffsetX;
-    private int _injectedOffsetY;
     private bool _hasPlatformPosition;
     private double _platformX;
     private double _platformY;
@@ -84,8 +83,11 @@ public sealed class VirtualCamera : ICamera
 
     /// <summary>构造虚拟相机（1280×1024，MARK 位于 (400,500) 与 (880,500)）。</summary>
     /// <param name="log">日志。</param>
-    public VirtualCamera(ILogger<VirtualCamera> log)
-        : this(log, DefaultWidth, DefaultHeight, DefaultMark1X, DefaultMark1Y, DefaultMark2X, DefaultMark2Y)
+    /// <param name="sampleProvider">样本图提供者（可空）；提供时优先返回样本图而非合成图。</param>
+    public VirtualCamera(ILogger<VirtualCamera> log,
+                         Func<(byte[] Mono8, int Width, int Height)?>? sampleProvider = null)
+        : this(log, DefaultWidth, DefaultHeight, DefaultMark1X, DefaultMark1Y, DefaultMark2X, DefaultMark2Y,
+               sampleProvider)
     {
     }
 
@@ -97,8 +99,10 @@ public sealed class VirtualCamera : ICamera
     /// <param name="mark1Y">MARK1 基准 Y。</param>
     /// <param name="mark2X">MARK2 基准 X。</param>
     /// <param name="mark2Y">MARK2 基准 Y。</param>
+    /// <param name="sampleProvider">样本图提供者（可空）。</param>
     public VirtualCamera(ILogger<VirtualCamera> log, int width, int height,
-                         int mark1X, int mark1Y, int mark2X, int mark2Y)
+                         int mark1X, int mark1Y, int mark2X, int mark2Y,
+                         Func<(byte[] Mono8, int Width, int Height)?>? sampleProvider = null)
     {
         _log = log;
         _width = width;
@@ -107,16 +111,11 @@ public sealed class VirtualCamera : ICamera
         _mark1Y = mark1Y;
         _mark2X = mark2X;
         _mark2Y = mark2Y;
+        _sampleProvider = sampleProvider;
     }
 
     /// <inheritdoc />
     public event EventHandler<CameraFaultEventArgs>? Fault;
-
-    /// <summary>最近一帧实际注入的 MARK 偏移 X（像素），供测试与演示验证纠偏是否在起作用。</summary>
-    public int LastOffsetX { get; private set; }
-
-    /// <summary>最近一帧实际注入的 MARK 偏移 Y（像素）。</summary>
-    public int LastOffsetY { get; private set; }
 
     /// <inheritdoc />
     public bool Initialize()
@@ -129,7 +128,8 @@ public sealed class VirtualCamera : ICamera
             }
 
             _initialized = true;
-            _log.LogInformation("虚拟相机初始化成功（{Width}x{Height} 合成图）", _width, _height);
+            _log.LogInformation("虚拟相机初始化成功（样本图 {HasSamples}，合成图 {Width}x{Height}）",
+                                _sampleProvider is not null, _width, _height);
             return true;
         }
     }
@@ -193,13 +193,28 @@ public sealed class VirtualCamera : ICamera
 
         await Task.Delay(delay, ct);
 
+        // 样本图模式：每次随机取一张模拟采样图（标定态除外——标定要求像素与平台位置确定性对应）
+        if (_sampleProvider is not null && !HasPlatformPosition())
+        {
+            var sample = _sampleProvider();
+            if (sample is { } s && s.Mono8.Length >= s.Width * s.Height)
+            {
+                return new CaptureResult
+                {
+                    Success = true,
+                    Mono8Data = s.Mono8,
+                    Width = s.Width,
+                    Height = s.Height,
+                    Timestamp = DateTime.Now,
+                };
+            }
+
+            _log.LogWarning("样本图读取失败，本帧退化为合成图");
+        }
+
         lock (_sync)
         {
-            var (dx, dy) = NextOffset();
-            LastOffsetX = dx;
-            LastOffsetY = dy;
-
-            var data = GenerateFrame(dx, dy);
+            var data = GenerateFrame();
             return new CaptureResult
             {
                 Success = true,
@@ -238,25 +253,10 @@ public sealed class VirtualCamera : ICamera
     }
 
     /// <summary>
-    /// 注入固定偏移（供 S5 视觉纠偏演示用，例如注入 ±3px 验证纠偏计算）。
-    /// 注入后每帧使用固定偏移；不注入时使用随机 ±5px。
-    /// </summary>
-    /// <param name="dx">MARK 偏移 X（像素）。</param>
-    /// <param name="dy">MARK 偏移 Y（像素）。</param>
-    public void InjectOffset(int dx, int dy)
-    {
-        lock (_sync)
-        {
-            _hasInjectedOffset = true;
-            _injectedOffsetX = dx;
-            _injectedOffsetY = dy;
-        }
-    }
-
-    /// <summary>
     /// 设置"当前平台位置"，开启「平台移动 → MARK 像素移动」的模拟（供 S5 九点标定）。
     /// 真实相机下工件随平台移动，相机固定；虚拟相机没有真实工件，因此用平台位置反推 MARK 像素坐标，
     /// 让九点标定在无硬件时也能拟合出真实反映「像素 → 平台」映射的仿射矩阵。
+    /// 该状态下取图一律走合成图（样本图姿态随机，无法与平台位置对应）。
     /// </summary>
     /// <param name="x">平台 X（mm）。</param>
     /// <param name="y">平台 Y（mm）。</param>
@@ -267,6 +267,15 @@ public sealed class VirtualCamera : ICamera
             _platformX = x;
             _platformY = y;
             _hasPlatformPosition = true;
+        }
+    }
+
+    /// <summary>退出「平台位置模拟」状态，恢复按样本图出帧（标定结束后调用）。</summary>
+    public void ClearPlatformPosition()
+    {
+        lock (_sync)
+        {
+            _hasPlatformPosition = false;
         }
     }
 
@@ -322,24 +331,21 @@ public sealed class VirtualCamera : ICamera
         }
     }
 
-    /// <summary>取下一次偏移：注入固定偏移优先，否则随机 ±5px。</summary>
-    private (int X, int Y) NextOffset()
+    /// <summary>是否处于「平台位置模拟」状态（标定中）。</summary>
+    private bool HasPlatformPosition()
     {
-        if (_hasInjectedOffset)
+        lock (_sync)
         {
-            return (_injectedOffsetX, _injectedOffsetY);
+            return _hasPlatformPosition;
         }
-
-        return (_random.Next(-MaxRandomOffset, MaxRandomOffset + 1),
-                _random.Next(-MaxRandomOffset, MaxRandomOffset + 1));
     }
 
     /// <summary>
-    /// 计算两个 MARK 的最终像素位置 = 基准 + 平台位移换算 + 注入偏移。
+    /// 计算两个 MARK 的最终像素位置 = 基准 + 平台位移换算。
     /// 平台 X 增大 → MARK 向右（u 增大）；平台 Y 增大 → MARK 向上（v 减小，像素纵轴向下）。
     /// 本方法只在调用方持锁时被调用（GenerateFrame 位于 TriggerAndGrabAsync 的锁块内）。
     /// </summary>
-    private (int Mark1X, int Mark1Y, int Mark2X, int Mark2Y) ComputeMarkPositions(int offsetX, int offsetY)
+    private (int Mark1X, int Mark1Y, int Mark2X, int Mark2Y) ComputeMarkPositions()
     {
         int platformDeltaU = 0;
         int platformDeltaV = 0;
@@ -350,22 +356,22 @@ public sealed class VirtualCamera : ICamera
             platformDeltaV = (int)Math.Round(-(_platformY - SimCalibBasePlatformY) * SimCalibScalePxPerMm);
         }
 
-        return (_mark1X + platformDeltaU + offsetX,
-                _mark1Y + platformDeltaV + offsetY,
-                _mark2X + platformDeltaU + offsetX,
-                _mark2Y + platformDeltaV + offsetY);
+        return (_mark1X + platformDeltaU,
+                _mark1Y + platformDeltaV,
+                _mark2X + platformDeltaU,
+                _mark2Y + platformDeltaV);
     }
 
-    /// <summary>生成一帧合成灰度图（噪声底 + 两个带偏移的十字 MARK）。</summary>
-    private byte[] GenerateFrame(int offsetX, int offsetY)
+    /// <summary>生成一帧合成灰度图（噪声底 + 两个实心圆 MARK）。</summary>
+    private byte[] GenerateFrame()
     {
         var buffer = new byte[_width * _height];
         Array.Fill(buffer, BackgroundGray);
 
-        var (mark1X, mark1Y, mark2X, mark2Y) = ComputeMarkPositions(offsetX, offsetY);
+        var (mark1X, mark1Y, mark2X, mark2Y) = ComputeMarkPositions();
 
-        DrawCross(buffer, mark1X, mark1Y);
-        DrawCross(buffer, mark2X, mark2Y);
+        DrawFilledCircle(buffer, mark1X, mark1Y, Mark1Radius);
+        DrawFilledCircle(buffer, mark2X, mark2Y, Mark2Radius);
 
         // 轻微噪声，更接近真实图像（03 文档 4.2）
         var noiseCount = buffer.Length / 20;
@@ -379,15 +385,22 @@ public sealed class VirtualCamera : ICamera
         return buffer;
     }
 
-    /// <summary>在指定中心画一个十字 MARK。</summary>
-    private void DrawCross(byte[] buffer, int cx, int cy)
+    /// <summary>
+    /// 在指定中心画一个实心圆 MARK。逐像素按「到圆心距离 ≤ 半径」判定，
+    /// 不做抗锯齿，保持与 <c>VisionService</c> 的合成模板完全同一套像素判定（边缘一致才好匹配）。
+    /// </summary>
+    private void DrawFilledCircle(byte[] buffer, int cx, int cy, int radius)
     {
-        for (var d = -MarkHalfSize; d <= MarkHalfSize; d++)
+        var radiusSquared = radius * radius;
+
+        for (var dy = -radius; dy <= radius; dy++)
         {
-            for (var t = -MarkThickness; t <= MarkThickness; t++)
+            for (var dx = -radius; dx <= radius; dx++)
             {
-                SetPixel(buffer, cx + t, cy + d, MarkGray);   // 竖线
-                SetPixel(buffer, cx + d, cy + t, MarkGray);   // 横线
+                if ((dx * dx) + (dy * dy) <= radiusSquared)
+                {
+                    SetPixel(buffer, cx + dx, cy + dy, MarkGray);
+                }
             }
         }
     }

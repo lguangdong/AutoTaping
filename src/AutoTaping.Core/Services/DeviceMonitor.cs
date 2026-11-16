@@ -134,7 +134,7 @@ public sealed class DeviceMonitor : IDeviceMonitor
             stopReasons[index] = _motion.GetStopReason(axis);
         }
 
-        var di = _io.ReadAllDi();
+        var di = _io.ReadAllDi(); //重新读一遍不能用缓存
         var doStates = _io.ReadAllDo();
 
         var forced = new List<string>();

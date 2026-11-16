@@ -487,7 +487,9 @@ public partial class App : Application
                                             log);
             });
 
-            services.AddSingleton<ICamera, VirtualCamera>();
+            services.AddSingleton<ICamera>(sp => CreateVirtualCamera(
+                configuration,
+                sp.GetRequiredService<ILogger<VirtualCamera>>()));
         }
         else
         {
@@ -541,7 +543,8 @@ public partial class App : Application
                     camera.Dispose();
                     report.CameraDegraded = true;
                     Log.Error("相机初始化失败，降级为 Virtual 相机");
-                    var virtualCamera = new VirtualCamera(sp.GetRequiredService<ILogger<VirtualCamera>>());
+                    var virtualCamera = CreateVirtualCamera(
+                        configuration, sp.GetRequiredService<ILogger<VirtualCamera>>());
                     virtualCamera.Initialize();
                     return virtualCamera;
                 }
@@ -776,6 +779,17 @@ public partial class App : Application
         }
 
         return new LeadshineMotionCardOptions { CardNo = cardNo, Axes = axes };
+    }
+
+    /// <summary>
+    /// 创建虚拟相机。样本图目录由 <c>Hardware:Camera:SampleImageDirectory</c> 指定，
+    /// 目录可用时每次取图随机返回一张模拟采样图，否则退化为合成图（见 docs/03 第 4 节）。
+    /// </summary>
+    private static VirtualCamera CreateVirtualCamera(IConfiguration configuration, ILogger<VirtualCamera> log)
+    {
+        var directory = configuration["Hardware:Camera:SampleImageDirectory"] ?? "images/samples";
+        var provider = SampleImageProvider.Create(directory, log);
+        return new VirtualCamera(log, provider);
     }
 
     /// <summary>从 appsettings 的 Hardware:Camera 段读取海康相机参数。缺失/非法用默认值兜底。</summary>

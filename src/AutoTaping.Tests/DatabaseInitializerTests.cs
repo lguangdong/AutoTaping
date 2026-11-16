@@ -162,4 +162,58 @@ public sealed class DatabaseInitializerTests
         Assert.Equal(1, statistics.TotalCount);
         Assert.Equal(3120, statistics.AverageCycleTimeMs, 3);
     }
+
+    /// <summary>
+    /// 启动时规整配方 JSON：历史遗留的废弃键（旧的两块 ROI、tapePath）必须被清掉，
+    /// 有效参数保留。幂等——没有变化时不会反复改写。
+    /// </summary>
+    [Fact]
+    public void Initialize_NormalizesLegacyRecipeJson()
+    {
+        using var database = new TestDatabase();
+        database.Initialize();
+
+        // 手工塞一条"老版本"配方：vision 下还是 mark1Roi/mark2Roi，根节点还残留 tapePath
+        const string legacyJson = """
+        {
+          "vision": {
+            "mark1Roi": { "x": 300, "y": 400, "w": 200, "h": 200 },
+            "mark2Roi": { "x": 780, "y": 400, "w": 200, "h": 200 },
+            "matchThreshold": 0.8
+          },
+          "tapePath": { "mode": "Line", "points": [] }
+        }
+        """;
+
+        long recipeId;
+        using (var connection = database.OpenConnection())
+        {
+            var now = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            connection.Execute(
+                """
+                INSERT INTO Recipe (Name, ProductCode, TapeSpec, JsonData, Version, IsActive, IsDeleted,
+                                    CreatedAt, CreatedBy, UpdatedAt, UpdatedBy)
+                VALUES ('legacy-roi', 'X', '', @JsonData, 1, 0, 0, @Now, 'test', @Now, 'test');
+                """,
+                new { JsonData = legacyJson, Now = now });
+
+            recipeId = connection.ExecuteScalar<long>("SELECT last_insert_rowid();");
+        }
+
+        // 再跑一次初始化（幂等入口，会执行 JSON 规整）
+        database.Initialize();
+
+        using var reopened = database.OpenConnection();
+        var json = reopened.ExecuteScalar<string>(
+            "SELECT JsonData FROM Recipe WHERE Id = @Id;", new { Id = recipeId });
+
+        Assert.NotNull(json);
+        Assert.DoesNotContain("mark1Roi", json);
+        Assert.DoesNotContain("mark2Roi", json);
+        Assert.DoesNotContain("tapePath", json);
+
+        // 有效参数与新增字段都要在
+        Assert.Contains("matchThreshold", json);
+        Assert.Contains("searchRoi", json);
+    }
 }

@@ -1,4 +1,4 @@
-// 职责：视觉标定页 ViewModel——实时预览 + MARK 识别 + 纠偏显示 + 九点标定向导 + 模板制作 + 标定结果落库
+// 职责：视觉标定页 ViewModel——单次拍照 + 手动识别 + 纠偏显示 + 九点标定向导 + 模板制作 + 标定结果落库
 // 层：App/ViewModels
 // 依赖：ICamera / IMotionCard / IAuthService / IRecipeRepository / ICalibrationRepository / IOperationLogRepository /
 //       IUserNotifier / IUiDispatcher（Core/Abstractions）、VisionOptions / WpfImageConverter（App/Infrastructure）、
@@ -26,8 +26,9 @@ namespace AutoTaping.App.ViewModels;
 
 /// <summary>
 /// 视觉标定页 ViewModel（08-页面清单 页面 4）。技术员及以上可进。
-/// 实时预览叠加 MARK 十字与 ROI 框；九点标定走「平台移 9 点 → 拍照识别 → 拟合仿射 → 残差表」；
-/// 模板制作在预览图上框选 ROI 保存；标定结果落库 + 存 9 张原图。
+/// 单次拍照显示一帧（叠加 MARK 十字与 ROI 框），识别由操作员手动触发；
+/// 九点标定走「平台移 9 点 → 拍照识别 → 拟合仿射 → 残差表」；
+/// 模板制作在已拍摄的画面上框选 ROI 保存；标定结果落库 + 存 9 张原图。
 /// </summary>
 public sealed partial class VisionViewModel : PageViewModel
 {
@@ -56,13 +57,14 @@ public sealed partial class VisionViewModel : PageViewModel
     private readonly TemplateMatcher _matcher1 = new();
     private readonly TemplateMatcher _matcher2 = new();
     private readonly CancellationTokenSource _lifetime = new();
-    private CancellationTokenSource? _previewCts;
     private CancellationTokenSource? _calibrationCts;
 
     // 当前激活配方的视觉参数（加载配方时填充，用于识别与纠偏）
     private Recipe? _activeRecipe;
-    private RoiRect _mark1Roi;
-    private RoiRect _mark2Roi;
+    private RoiRect _searchRoi;
+    private double _markDistanceTolerance = 20.0;
+    private double _mark1Radius = 15.0;
+    private double _mark2Radius = 9.0;
     private double _matchThreshold = 0.7;
     private double _templateMark1U;
     private double _templateMark1V;
@@ -80,6 +82,9 @@ public sealed partial class VisionViewModel : PageViewModel
     private int _calibrationFrameWidth;
     private int _calibrationFrameHeight;
     private RoiRect? _selectedRoi;
+
+    /// <summary>最近一次拍摄的帧：识别与模板制作都基于它，避免重复取图导致画面与操作对象不一致。</summary>
+    private CaptureResult? _lastFrame;
 
     /// <summary>构造视觉页 ViewModel（由 DI 单例创建，页面进入时才启动预览）。</summary>
     public VisionViewModel(
@@ -142,14 +147,9 @@ public sealed partial class VisionViewModel : PageViewModel
     [ObservableProperty]
     private int _previewHeight = 1024;
 
-    /// <summary>是否处于连续预览中。</summary>
+    /// <summary>底部状态文字（已拍照待识别 / 识别正常 / 失败 / 相机未连接）。</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PreviewToggleText))]
-    private bool _isPreviewing;
-
-    /// <summary>预览底部状态文字（识别正常 / 失败 / 相机未连接）。</summary>
-    [ObservableProperty]
-    private string _previewStatus = "未开始预览";
+    private string _previewStatus = "点击「拍照」获取图像";
 
     /// <summary>相机是否已连接。</summary>
     [ObservableProperty]
@@ -163,9 +163,6 @@ public sealed partial class VisionViewModel : PageViewModel
     /// <summary>增益（dB）。</summary>
     [ObservableProperty]
     private double _gain;
-
-    /// <summary>预览切换按钮文字。</summary>
-    public string PreviewToggleText => IsPreviewing ? "停止预览" : "连续预览";
 
     /// <summary>相机连接状态文字。</summary>
     public string CameraStatusText => IsCameraConnected ? "已连接" : "未连接";
@@ -216,31 +213,18 @@ public sealed partial class VisionViewModel : PageViewModel
     [ObservableProperty]
     private string _deltaText = "--";
 
-    /// <summary>MARK1 搜索 ROI（用于叠加矩形框）。</summary>
+    /// <summary>两个 MARK 共用的搜索区域（用于叠加矩形框）。</summary>
     [ObservableProperty]
-    private int _mark1RoiX;
+    private int _searchRoiX;
 
     [ObservableProperty]
-    private int _mark1RoiY;
+    private int _searchRoiY;
 
     [ObservableProperty]
-    private int _mark1RoiW;
+    private int _searchRoiW;
 
     [ObservableProperty]
-    private int _mark1RoiH;
-
-    /// <summary>MARK2 搜索 ROI。</summary>
-    [ObservableProperty]
-    private int _mark2RoiX;
-
-    [ObservableProperty]
-    private int _mark2RoiY;
-
-    [ObservableProperty]
-    private int _mark2RoiW;
-
-    [ObservableProperty]
-    private int _mark2RoiH;
+    private int _searchRoiH;
 
     // ==================== 框选 ROI（模板制作） ====================
 
@@ -306,27 +290,25 @@ public sealed partial class VisionViewModel : PageViewModel
 
     // ==================== 生命周期 ====================
 
-    /// <summary>进入本页：加载激活配方与模板、启动连续预览。</summary>
+    /// <summary>进入本页：加载激活配方与模板（取图由操作员点「拍照」触发，不再自动连续预览）。</summary>
     public override Task<bool> OnEnteringAsync(CancellationToken ct)
     {
         LoadRecipeAndTemplates();
-        StartPreview();
+        IsCameraConnected = _camera.IsConnected;
         return Task.FromResult(true);
     }
 
-    /// <summary>离开本页：停止预览与标定。</summary>
+    /// <summary>离开本页：停止标定。</summary>
     public override Task OnLeaveAsync(CancellationToken ct)
     {
-        StopPreview();
         StopCalibration();
-        _log.LogInformation("离开视觉页：已停止预览与标定");
+        _log.LogInformation("离开视觉页：已停止标定");
         return Task.CompletedTask;
     }
 
     /// <inheritdoc />
     protected override void DisposeCore()
     {
-        StopPreview();
         StopCalibration();
         _lifetime.Cancel();
         _lifetime.Dispose();
@@ -334,42 +316,74 @@ public sealed partial class VisionViewModel : PageViewModel
         _matcher2.Dispose();
     }
 
-    // ==================== 预览命令 ====================
+    // ==================== 拍照 / 识别命令 ====================
 
-    /// <summary>开始 / 停止连续预览。</summary>
+    /// <summary>拍一张照片并显示；识别由操作员随后点「识别」手动触发。</summary>
     [RelayCommand]
-    private void TogglePreview()
-    {
-        if (IsPreviewing)
-        {
-            StopPreview();
-        }
-        else
-        {
-            StartPreview();
-        }
-    }
-
-    /// <summary>单次拍照并识别一帧。</summary>
-    [RelayCommand]
-    private async Task CaptureOnceAsync()
+    private async Task TakePhotoAsync()
     {
         try
         {
             EnsureCameraReady();
+            IsCameraConnected = _camera.IsConnected;
+
             var frame = await _camera.TriggerAndGrabAsync(_options.CaptureTimeoutMs, _lifetime.Token);
             if (!frame.Success || frame.Mono8Data is null)
             {
+                PreviewStatus = "拍照失败";
                 _notifier.Warn(frame.ErrorMessage ?? "拍照失败");
                 return;
             }
 
-            await ProcessFrameAsync(frame);
+            _lastFrame = frame;
+            RecognizeCommand.NotifyCanExecuteChanged();
+
+            using var mat = ImageConverter.ToMat(frame.Mono8Data, frame.Width, frame.Height);
+            await ShowFrameAsync(mat, frame.Width, frame.Height);
+
+            _log.LogInformation("已拍照：{Width}x{Height}", frame.Width, frame.Height);
+        }
+        catch (OperationCanceledException)
+        {
+            // 切页/退出取消取图属正常路径
         }
         catch (Exception ex)
         {
-            _log.LogError(ex, "单次拍照失败");
+            _log.LogError(ex, "拍照失败");
             _notifier.Error("拍照失败，请检查相机状态。");
+        }
+    }
+
+    /// <summary>对最近一张照片执行识别（图像处理在后台线程）。</summary>
+    [RelayCommand(CanExecute = nameof(CanRecognize))]
+    private async Task RecognizeAsync()
+    {
+        var frame = _lastFrame;
+        if (frame?.Mono8Data is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var recognition = await Task.Run(
+                () =>
+                {
+                    using var mat = ImageConverter.ToMat(frame.Mono8Data, frame.Width, frame.Height);
+                    return Recognize(mat);
+                },
+                _lifetime.Token);
+
+            await _ui.InvokeAsync(() => ApplyRecognition(recognition));
+        }
+        catch (OperationCanceledException)
+        {
+            // 切页/退出取消识别属正常路径
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "识别失败");
+            _notifier.Error("识别失败，请检查模板与相机状态。");
         }
     }
 
@@ -388,21 +402,6 @@ public sealed partial class VisionViewModel : PageViewModel
         {
             _log.LogError(ex, "应用相机参数失败");
             _notifier.Warn("相机参数应用失败，请检查相机连接。");
-        }
-    }
-
-    /// <summary>演示用：注入固定偏移 (3, -3)px，用于验证纠偏计算（验收标准 4）。</summary>
-    [RelayCommand]
-    private void InjectOffsetDemo()
-    {
-        if (_camera is VirtualCamera virtualCamera)
-        {
-            virtualCamera.InjectOffset(3, -3);
-            _notifier.Info("已注入偏移 (+3, -3)px，预览将显示对应纠偏量。");
-        }
-        else
-        {
-            _notifier.Info("真实相机模式下无需注入偏移。");
         }
     }
 
@@ -425,8 +424,6 @@ public sealed partial class VisionViewModel : PageViewModel
 
         _log.LogInformation("开始九点标定：中心 ({CenterX:F2}, {CenterY:F2})mm 步长 {Step:F2}mm",
                             CalibrationCenterX, CalibrationCenterY, CalibrationStep);
-
-        StopPreview();
 
         IsCalibrating = true;
         _calibrationResult = null;
@@ -452,6 +449,12 @@ public sealed partial class VisionViewModel : PageViewModel
             IsCalibrating = false;
             _calibrationCts.Dispose();
             _calibrationCts = null;
+
+            // 退出平台位置模拟：之后取图恢复「随机样本图」模式
+            if (_camera is VirtualCamera virtualCamera)
+            {
+                virtualCamera.ClearPlatformPosition();
+            }
         }
     }
 
@@ -511,11 +514,11 @@ public sealed partial class VisionViewModel : PageViewModel
 
     /// <summary>把框选的 ROI 保存为 MARK1 模板并更新配方。</summary>
     [RelayCommand(CanExecute = nameof(CanSaveTemplate))]
-    private Task SaveMark1TemplateAsync() => SaveMarkTemplateAsync(markIndex: 1);
+    private void SaveMark1Template() => SaveMarkTemplate(markIndex: 1);
 
     /// <summary>把框选的 ROI 保存为 MARK2 模板并更新配方。</summary>
     [RelayCommand(CanExecute = nameof(CanSaveTemplate))]
-    private Task SaveMark2TemplateAsync() => SaveMarkTemplateAsync(markIndex: 2);
+    private void SaveMark2Template() => SaveMarkTemplate(markIndex: 2);
 
     // ==================== View 转发：鼠标框选 ROI ====================
 
@@ -537,13 +540,42 @@ public sealed partial class VisionViewModel : PageViewModel
         HasSelectedRoi = true;
     }
 
-    // ==================== 私有：预览 ====================
+    /// <summary>
+    /// 生成"以指定点为中心、尺寸与给定窗口相同"的裁剪窗口（自动夹到图像内）。
+    /// 模板中心约定为 (边长 − 1)/2，故左上角 = 圆心 − (边长 − 1)/2。
+    /// </summary>
+    private static Rect CenterWindowOn(Rect window, Point2f center, int imageWidth, int imageHeight)
+    {
+        var left = (int)Math.Round(center.X - ((window.Width - 1) / 2.0));
+        var top = (int)Math.Round(center.Y - ((window.Height - 1) / 2.0));
+
+        left = Math.Clamp(left, 0, Math.Max(0, imageWidth - window.Width));
+        top = Math.Clamp(top, 0, Math.Max(0, imageHeight - window.Height));
+
+        return new Rect(left, top, window.Width, window.Height);
+    }
+
+    /// <summary>清除框选区域：模板保存成功或重新拍照后调用，避免旧框继续留在画面上。</summary>
+    private void ClearRoiSelection()
+    {
+        _selectedRoi = null;
+        HasSelectedRoi = false;
+        SelectedRoiX = 0;
+        SelectedRoiY = 0;
+        SelectedRoiW = 0;
+        SelectedRoiH = 0;
+    }
+
+    // ==================== 私有：拍照 / 识别 ====================
 
     private bool CanStartCalibration() => !IsCalibrating;
 
     private bool CanSaveCalibration() => _calibrationResult is not null && _calibrationResult.IsValid && !IsCalibrating;
 
     private bool CanSaveTemplate() => HasSelectedRoi && !IsCalibrating;
+
+    /// <summary>是否已有可识别的照片。</summary>
+    private bool CanRecognize() => _lastFrame?.Mono8Data is not null && !IsCalibrating;
 
     /// <summary>确保相机已初始化并处于采集状态。</summary>
     private void EnsureCameraReady()
@@ -559,122 +591,53 @@ public sealed partial class VisionViewModel : PageViewModel
         }
     }
 
-    /// <summary>启动连续预览循环（重复调用先停旧循环）。</summary>
-    private void StartPreview()
+    /// <summary>把刚拍的帧显示到界面，并清空上一次的识别结果（等操作员点「识别」）。</summary>
+    private async Task ShowFrameAsync(Mat mat, int width, int height)
     {
-        if (IsPreviewing)
-        {
-            return;
-        }
-
-        EnsureCameraReady();
-        IsCameraConnected = _camera.IsConnected;
-
-        if (!IsCameraConnected)
-        {
-            PreviewStatus = "相机未连接";
-            _notifier.Warn("相机未连接，无法预览。");
-            return;
-        }
-
-        StopPreviewLoop();
-
-        _previewCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-        var token = _previewCts.Token;
-        IsPreviewing = true;
-        _ = Task.Run(() => PreviewLoopAsync(token), token);
-    }
-
-    private void StopPreview()
-    {
-        IsPreviewing = false;
-        StopPreviewLoop();
-    }
-
-    private void StopPreviewLoop()
-    {
-        var cts = _previewCts;
-        if (cts is null)
-        {
-            return;
-        }
-
-        _previewCts = null;
-        cts.Cancel();
-        cts.Dispose();
-    }
-
-    /// <summary>预览循环：串行软触发取图 → 识别 → 转图 → 切 UI 线程显示。</summary>
-    private async Task PreviewLoopAsync(CancellationToken ct)
-    {
-        try
-        {
-            while (!ct.IsCancellationRequested)
-            {
-                CaptureResult frame;
-                try
-                {
-                    frame = await _camera.TriggerAndGrabAsync(_options.CaptureTimeoutMs, ct);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _log.LogError(ex, "预览取图失败");
-                    await Task.Delay(500, ct);
-                    continue;
-                }
-
-                if (!frame.Success || frame.Mono8Data is null)
-                {
-                    await Task.Delay(200, ct);
-                    continue;
-                }
-
-                await ProcessFrameAsync(frame, ct);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // 切页/退出取消预览是正常路径
-        }
-        catch (Exception ex)
-        {
-            _log.LogError(ex, "预览循环异常终止");
-        }
-        finally
-        {
-            if (_previewCts is not null && !_previewCts.IsCancellationRequested)
-            {
-                // 循环意外退出时同步状态
-                await _ui.InvokeAsync(() => IsPreviewing = false);
-            }
-        }
-    }
-
-    /// <summary>处理一帧：ToMat → 识别 → 转 BitmapSource → UI 线程显示。</summary>
-    private async Task ProcessFrameAsync(CaptureResult frame, CancellationToken ct = default)
-    {
-        using var mat = ImageConverter.ToMat(frame.Mono8Data!, frame.Width, frame.Height);
-        var recognition = Recognize(mat);
         var bitmap = WpfImageConverter.ToBitmapSource(mat);
 
-        await _ui.InvokeAsync(() => ApplyFrame(bitmap, recognition, frame.Width, frame.Height));
+        await _ui.InvokeAsync(() =>
+        {
+            PreviewImage = bitmap;
+            PreviewWidth = width;
+            PreviewHeight = height;
+
+            // 新画面上的框选没有意义了（对应的是上一帧的内容）
+            ClearRoiSelection();
+
+            Mark1Found = false;
+            Mark2Found = false;
+            Mark1Text = "未识别";
+            Mark2Text = "未识别";
+            MatchScoreText = "--";
+            AngleText = "--";
+            DeltaText = "--";
+            PreviewStatus = "已拍照，点击「识别」";
+        });
     }
 
-    /// <summary>识别两个 MARK 并计算纠偏（后台线程执行）。</summary>
+    /// <summary>识别两个 MARK 并计算纠偏（后台线程执行）：同一块搜索区域上跑两个模板，身份由直径区分。</summary>
     private (TemplateMatchResult? Mark1, TemplateMatchResult? Mark2, CorrectionResult? Correction) Recognize(Mat mat)
     {
-        var m1 = _matcher1.Match(mat, ToRect(_mark1Roi), _matchThreshold);
-        var m2 = _matcher2.Match(mat, ToRect(_mark2Roi), _matchThreshold);
+        var searchRoi = ToRect(_searchRoi);
+        var m1 = _matcher1.Match(mat, searchRoi, _matchThreshold);
+        var m2 = _matcher2.Match(mat, searchRoi, _matchThreshold);
 
         CorrectionResult? corr = null;
         if (m1 is not null && m2 is not null && _calibrationResult is not null)
         {
             var template1 = new Point2f((float)_templateMark1U, (float)_templateMark1V);
             var template2 = new Point2f((float)_templateMark2U, (float)_templateMark2V);
+
+            // 间距校验：与 VisionService 同口径，拦住"某个模板命中了干扰圆"的情况
+            var expected = Distance(template1, template2);
+            var actual = Distance(m1.Value.Center, m2.Value.Center);
+            if (Math.Abs(actual - expected) > _markDistanceTolerance)
+            {
+                _log.LogWarning("两个 MARK 间距异常：实测 {Actual:F1}px 标称 {Expected:F1}px", actual, expected);
+                return (m1, m2, null);
+            }
+
             corr = _correctionService.Compute(
                 m1.Value.Center, m2.Value.Center, template1, template2,
                 _calibrationResult, _maxDeltaX, _maxDeltaY, _maxDeltaTheta);
@@ -684,15 +647,9 @@ public sealed partial class VisionViewModel : PageViewModel
     }
 
     /// <summary>把识别结果写入界面（必须在 UI 线程调用）。</summary>
-    private void ApplyFrame(
-        BitmapSource bitmap,
-        (TemplateMatchResult? Mark1, TemplateMatchResult? Mark2, CorrectionResult? Correction) recognition,
-        int width, int height)
+    private void ApplyRecognition(
+        (TemplateMatchResult? Mark1, TemplateMatchResult? Mark2, CorrectionResult? Correction) recognition)
     {
-        PreviewImage = bitmap;
-        PreviewWidth = width;
-        PreviewHeight = height;
-
         var (m1, m2, corr) = recognition;
 
         Mark1Found = m1 is not null;
@@ -718,8 +675,13 @@ public sealed partial class VisionViewModel : PageViewModel
 
         if (corr is not null && corr.IsValid)
         {
-            AngleText = $"{corr.DeltaTheta:F2}°";
-            DeltaText = $"ΔX {corr.DeltaX:F3} mm  ΔY {corr.DeltaY:F3} mm  Δθ {corr.DeltaTheta:F2}°";
+            // 按显示精度归零：标称姿态下 Δ 只剩浮点噪声（如 -1e-15），直接格式化会显示成 "-0.00"，观感像出错
+            var showX = SnapForDisplay(corr.DeltaX, 3);
+            var showY = SnapForDisplay(corr.DeltaY, 3);
+            var showTheta = SnapForDisplay(corr.DeltaTheta, 2);
+
+            AngleText = $"{showTheta:F2}°";
+            DeltaText = $"ΔX {showX:F3} mm  ΔY {showY:F3} mm  Δθ {showTheta:F2}°";
             PreviewStatus = "识别正常";
         }
         else if (corr is not null && !corr.IsValid)
@@ -753,8 +715,10 @@ public sealed partial class VisionViewModel : PageViewModel
         var position = _activeRecipe.Parameters.Position;
         var process = _activeRecipe.Parameters.Process;
 
-        _mark1Roi = vision.Mark1Roi;
-        _mark2Roi = vision.Mark2Roi;
+        _searchRoi = vision.SearchRoi;
+        _markDistanceTolerance = vision.MarkDistanceTolerancePx;
+        _mark1Radius = vision.Mark1RadiusPx;
+        _mark2Radius = vision.Mark2RadiusPx;
         _matchThreshold = vision.MatchThreshold;
         _templateMark1U = vision.TemplateMark1U;
         _templateMark1V = vision.TemplateMark1V;
@@ -769,20 +733,23 @@ public sealed partial class VisionViewModel : PageViewModel
         CalibrationCenterX = position.PhotoPosX;
         CalibrationCenterY = position.PhotoPosY;
 
-        ApplyRoiToUi();
-
         LoadTemplate(vision.Template1, _matcher1);
         LoadTemplate(vision.Template2, _matcher2);
+
+        EnsureSearchRoiUsable();
+        ApplyRoiToUi();
 
         LoadActiveCalibration();
     }
 
-    /// <summary>无激活配方时使用默认视觉参数（ROI 与阈值取 VisionParameters 默认值）。</summary>
+    /// <summary>无激活配方时使用默认视觉参数（搜索区域与阈值取 VisionParameters 默认值）。</summary>
     private void LoadDefaultVisionParameters()
     {
         var vision = new VisionParameters();
-        _mark1Roi = vision.Mark1Roi;
-        _mark2Roi = vision.Mark2Roi;
+        _searchRoi = vision.SearchRoi;
+        _markDistanceTolerance = vision.MarkDistanceTolerancePx;
+        _mark1Radius = vision.Mark1RadiusPx;
+        _mark2Radius = vision.Mark2RadiusPx;
         _matchThreshold = vision.MatchThreshold;
         _templateMark1U = vision.TemplateMark1U;
         _templateMark1V = vision.TemplateMark1V;
@@ -794,18 +761,48 @@ public sealed partial class VisionViewModel : PageViewModel
         ApplyRoiToUi();
     }
 
-    /// <summary>把 MARK ROI 写入叠加属性（UI 线程）。</summary>
+    /// <summary>把搜索区域写入叠加属性（UI 线程）。</summary>
     private void ApplyRoiToUi()
     {
-        Mark1RoiX = _mark1Roi.X;
-        Mark1RoiY = _mark1Roi.Y;
-        Mark1RoiW = _mark1Roi.W;
-        Mark1RoiH = _mark1Roi.H;
+        SearchRoiX = _searchRoi.X;
+        SearchRoiY = _searchRoi.Y;
+        SearchRoiW = _searchRoi.W;
+        SearchRoiH = _searchRoi.H;
+    }
 
-        Mark2RoiX = _mark2Roi.X;
-        Mark2RoiY = _mark2Roi.Y;
-        Mark2RoiW = _mark2Roi.W;
-        Mark2RoiH = _mark2Roi.H;
+    /// <summary>
+    /// 校验搜索区域：小于「模板 + 20px」时按标称 MARK 位置重算并写回配方。
+    /// 目的是消除「搜索区 = 模板尺寸 → 只有一个候选位置 → 坐标恒为区域中心」这种静默错误。
+    /// </summary>
+    private void EnsureSearchRoiUsable()
+    {
+        var templateSize = Math.Max(_matcher1.TemplateWidth, _matcher2.TemplateWidth);
+        if (templateSize <= 0)
+        {
+            return;
+        }
+
+        var usable = _searchRoi.IsValid &&
+                     _searchRoi.W >= templateSize + 20 &&
+                     _searchRoi.H >= templateSize + 20;
+        if (usable)
+        {
+            return;
+        }
+
+        var previous = _searchRoi;
+        _searchRoi = VisionParameters.CreateNominalSearchRoi(
+            _templateMark1U, _templateMark1V, _templateMark2U, _templateMark2V,
+            VisionParameters.DefaultSearchMarginPx);
+
+        _log.LogWarning("搜索区域过小（{Previous}，模板 {TemplateSize}px），已按标称位置重置为 {Current}",
+                        previous, templateSize, _searchRoi);
+
+        if (_activeRecipe is not null)
+        {
+            _activeRecipe.Parameters.Vision.SearchRoi = _searchRoi;
+            _recipes.Update(_activeRecipe);
+        }
     }
 
     /// <summary>加载模板文件；模板不存在时记录警告但不阻断（进入页仍可预览，只是无法识别）。</summary>
@@ -992,7 +989,6 @@ public sealed partial class VisionViewModel : PageViewModel
             : $"RMS = {result.RmsError:F4} mm  ❌ 不合格（≥ {CalibrationResult.RmsPassThresholdMm:F2} mm），请检查机械/镜头/特征识别后重标";
 
         SaveCalibrationCommand.NotifyCanExecuteChanged();
-        StartPreview();
     }
 
     /// <summary>保存 9 张标定原图，返回图片目录（相对程序根目录）。</summary>
@@ -1018,33 +1014,49 @@ public sealed partial class VisionViewModel : PageViewModel
 
     // ==================== 私有：模板制作 ====================
 
-    private async Task SaveMarkTemplateAsync(int markIndex)
+    private void SaveMarkTemplate(int markIndex)
     {
         if (_selectedRoi is not { } roi)
         {
-            _notifier.Warn("请先在预览图上框选 MARK 区域。");
+            _notifier.Warn("请先在图上框选 MARK 区域。");
+            return;
+        }
+
+        // 模板必须从"当前显示的这一帧"裁，不能重新取图：重新取图会拿到另一帧，框选位置与画面就对不上了
+        var frame = _lastFrame;
+        if (frame?.Mono8Data is null)
+        {
+            _notifier.Warn("请先点击「拍照」获取图像，再框选并保存模板。");
             return;
         }
 
         try
         {
-            EnsureCameraReady();
-            var frame = await _camera.TriggerAndGrabAsync(_options.CaptureTimeoutMs, _lifetime.Token);
-            if (!frame.Success || frame.Mono8Data is null)
-            {
-                _notifier.Warn("拍照失败，无法制作模板。");
-                return;
-            }
-
-            using var mat = ImageConverter.ToMat(frame.Mono8Data!, frame.Width, frame.Height);
+            using var mat = ImageConverter.ToMat(frame.Mono8Data, frame.Width, frame.Height);
             var rect = ToRect(roi);
+            var nominalRadius = markIndex == 1 ? _mark1Radius : _mark2Radius;
+
+            // 模板必须以 MARK 真实中心为中心：Match 返回的是"模板框中心"，
+            // 框选时 MARK 一旦不居中，识别点就会跟着偏出圆心（且换模板后会引入真实偏差）。
+            var cropRect = rect;
+            if (MarkLocator.TryLocate(mat, rect, nominalRadius, out var markCenter, out var locateReason))
+            {
+                cropRect = CenterWindowOn(rect, markCenter, mat.Width, mat.Height);
+                _log.LogInformation("MARK{Index} 圆心定位：({U:F2}, {V:F2})，裁剪窗口 {Rect}",
+                                    markIndex, markCenter.X, markCenter.Y, cropRect);
+            }
+            else
+            {
+                _log.LogWarning("MARK{Index} 圆心定位失败（{Reason}），按框选区域直接裁剪", markIndex, locateReason);
+                _notifier.Warn($"未能定位 MARK 圆心（{locateReason}），请把 MARK 框在框选区域正中后重新保存。");
+            }
 
             var relativePath = markIndex == 1
                 ? "templates/{recipe}/mark1.png"
                 : "templates/{recipe}/mark2.png";
             var fullPath = ResolveTemplatePath(relativePath);
 
-            ImageConverter.SaveRoiPng(mat, rect, fullPath);
+            ImageConverter.SaveRoiPng(mat, cropRect, fullPath);
 
             // 用刚保存的模板匹配找精确中心，作为模板基准坐标（与后续识别口径一致）
             var matcher = markIndex == 1 ? _matcher1 : _matcher2;
@@ -1056,7 +1068,8 @@ public sealed partial class VisionViewModel : PageViewModel
                 return;
             }
 
-            UpdateRecipeTemplate(markIndex, rect, relativePath, match.Value.Center);
+            UpdateRecipeTemplate(markIndex, cropRect, relativePath, match.Value.Center);
+            ClearRoiSelection();
 
             _notifier.Info($"MARK{markIndex} 模板已保存：{fullPath}");
             _log.LogInformation("MARK{Index} 模板已制作：{Path}，基准像素 ({U:F1}, {V:F1})",
@@ -1069,9 +1082,14 @@ public sealed partial class VisionViewModel : PageViewModel
         }
     }
 
-    /// <summary>更新激活配方的视觉参数（ROI / 模板路径 / 模板基准坐标）并落库。</summary>
+    /// <summary>
+    /// 更新激活配方的视觉参数（模板路径 / 模板基准坐标）并落库。
+    /// 注意：**不改搜索区域**——搜索区域是「到哪找」，由标称位置决定；模板只决定「长什么样」。
+    /// </summary>
     private void UpdateRecipeTemplate(int markIndex, Rect roi, string relativePath, Point2f center)
     {
+        _ = roi;   // 框选框只用于裁模板，不再写入配方
+
         var recipe = _activeRecipe;
         if (recipe is null)
         {
@@ -1084,24 +1102,23 @@ public sealed partial class VisionViewModel : PageViewModel
 
         if (markIndex == 1)
         {
-            vision.Mark1Roi = new RoiRect(roi.X, roi.Y, roi.Width, roi.Height);
             vision.Template1 = templatePath;
             vision.TemplateMark1U = center.X;
             vision.TemplateMark1V = center.Y;
-            _mark1Roi = vision.Mark1Roi;
             _templateMark1U = center.X;
             _templateMark1V = center.Y;
         }
         else
         {
-            vision.Mark2Roi = new RoiRect(roi.X, roi.Y, roi.Width, roi.Height);
             vision.Template2 = templatePath;
             vision.TemplateMark2U = center.X;
             vision.TemplateMark2V = center.Y;
-            _mark2Roi = vision.Mark2Roi;
             _templateMark2U = center.X;
             _templateMark2V = center.Y;
         }
+
+        // 新模板尺寸可能比旧的大，顺手确认搜索区域仍然够用
+        EnsureSearchRoiUsable();
 
         recipe.UpdatedBy = _auth.CurrentUser?.UserName ?? "";
         _recipes.Update(recipe);
@@ -1111,6 +1128,26 @@ public sealed partial class VisionViewModel : PageViewModel
     // ==================== 工具 ====================
 
     private static Rect ToRect(RoiRect roi) => new(roi.X, roi.Y, roi.W, roi.H);
+
+    /// <summary>
+    /// 按显示精度归零：小于末位一半的数值直接显示为 0。
+    /// 目的是避免"标称姿态下 Δ 是浮点噪声"被格式化成 "-0.00" 这种看起来像故障的输出。
+    /// </summary>
+    /// <param name="value">原始数值。</param>
+    /// <param name="decimals">显示小数位数。</param>
+    private static double SnapForDisplay(double value, int decimals)
+    {
+        var threshold = 0.5 * Math.Pow(10, -decimals);
+        return Math.Abs(value) < threshold ? 0.0 : value;
+    }
+
+    /// <summary>两点欧氏距离（像素）。</summary>
+    private static double Distance(Point2f a, Point2f b)
+    {
+        var dx = a.X - b.X;
+        var dy = a.Y - b.Y;
+        return Math.Sqrt((dx * dx) + (dy * dy));
+    }
 
     /// <summary>九点标定残差表的一行（展示模型，只读）。</summary>
     /// <param name="Index">序号。</param>
