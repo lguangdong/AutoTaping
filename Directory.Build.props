@@ -1,0 +1,23 @@
+<Project>
+
+  <!-- 海康 MVS 托管封装的探测（全仓库共用，避免每个工程各写一份路径判断）。
+       探测顺序：
+         1) src/AutoTaping.Hardware/libs/MvCameraControl.Net.dll（仓库内置，推荐，不依赖环境变量）
+         2) %MVCAM_COMMON_RUNENV%\DotNet\AnyCpu\netstandard2.0\（MVS 5.x 布局，多一层 TFM 目录）
+         3) %MVCAM_COMMON_RUNENV%\DotNet\AnyCpu\ 或 DotNet\win64\（老版本布局）
+       探测结果放进 $(MvsNetDll)，由各工程决定怎么用：
+         - AutoTaping.Hardware：编译引用 + 定义 HAS_MVS（决定编译真实实现还是占位实现）
+         - AutoTaping.App：再登记一次引用，只为「复制到输出 + 写进 deps.json」。
+           为什么必须写进 deps.json：.NET Core 运行时按 deps.json 建 TPA 列表来解析程序集，
+           没登记的 dll 即使躺在 exe 旁边也不会被找到（表现为 FileNotFoundException + 降级 Virtual）。 -->
+  <PropertyGroup>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and Exists('$(MSBuildThisFileDirectory)src\AutoTaping.Hardware\libs\MvCameraControl.Net.dll')">$(MSBuildThisFileDirectory)src\AutoTaping.Hardware\libs\MvCameraControl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and Exists('$(MSBuildThisFileDirectory)src\AutoTaping.Hardware\libs\MvCamCtrl.Net.dll')">$(MSBuildThisFileDirectory)src\AutoTaping.Hardware\libs\MvCamCtrl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and '$(MVCAM_COMMON_RUNENV)' != '' and Exists('$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\netstandard2.0\MvCameraControl.Net.dll')">$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\netstandard2.0\MvCameraControl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and '$(MVCAM_COMMON_RUNENV)' != '' and Exists('$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\MvCameraControl.Net.dll')">$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\MvCameraControl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and '$(MVCAM_COMMON_RUNENV)' != '' and Exists('$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\MvCamCtrl.Net.dll')">$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\MvCamCtrl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and '$(MVCAM_COMMON_RUNENV)' != '' and Exists('$(MVCAM_COMMON_RUNENV)\DotNet\win64\netstandard2.0\MvCameraControl.Net.dll')">$(MVCAM_COMMON_RUNENV)\DotNet\win64\netstandard2.0\MvCameraControl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and '$(MVCAM_COMMON_RUNENV)' != '' and Exists('$(MVCAM_COMMON_RUNENV)\DotNet\win64\MvCameraControl.Net.dll')">$(MVCAM_COMMON_RUNENV)\DotNet\win64\MvCameraControl.Net.dll</MvsNetDll>
+  </PropertyGroup>
+
+</Project>

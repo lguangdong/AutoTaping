@@ -641,16 +641,21 @@ public sealed class HikvisionCamera : ICamera
             return false;
         }
 
-        LogIfFailed(camera.MV_CC_SetEnumValue_NET("TriggerActivation", 0), "TriggerActivation");
-
+        // TriggerActivation 只对硬触发（Line0/Line1）有意义，软触发下部分机型直接报节点不可写，
+        // 所以只在硬触发时才设，避免刷无意义的告警（MV-CA060 系列实测：软触发下该节点返回 0x80000106）
         var softwareTrigger = string.Equals(triggerSource, "Software", StringComparison.OrdinalIgnoreCase);
         lock (_stateLock)
         {
             _softwareTrigger = softwareTrigger;
         }
 
-        if (!softwareTrigger)
+        if (softwareTrigger)
         {
+            _log.LogInformation("相机触发源 = Software（上位机逐个软触发）");
+        }
+        else
+        {
+            LogIfFailed(camera.MV_CC_SetEnumValue_NET("TriggerActivation", 0), "TriggerActivation");
             _log.LogInformation("相机使用硬件触发（TriggerSource={Source}），上位机不再逐个软触发", triggerSource);
         }
 

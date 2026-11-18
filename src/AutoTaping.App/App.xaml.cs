@@ -459,21 +459,29 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// 注册硬件层：按 appsettings 的 Hardware:UseVirtual 选择实现。
-    /// UseVirtual=true 直接注册 Virtual；UseVirtual=false 注册真实实现（Leadshine/Hikvision/MotionCardIo），
-    /// 真实硬件初始化失败时在注册工厂内降级为 Virtual，并经 <see cref="HardwareStartupReport"/> 标记，由
+    /// 注册硬件层。<c>Hardware:UseVirtual</c> 是总开关，<c>Hardware:MotionCard:Type</c> /
+    /// <c>Hardware:Camera:Type</c> 可逐个设备覆盖：
+    /// 填 <c>Virtual</c> → 该设备直接走虚拟实现；填 <c>Leadshine</c> / <c>Hikvision</c> / <c>Real</c> → 强制真实；
+    /// 留空 → 跟随 <c>Hardware:UseVirtual</c>。
+    /// 真实设备初始化失败时在注册工厂内降级为 Virtual，并经 <see cref="HardwareStartupReport"/> 标记，由
     /// <see cref="InitializeHardware"/> 报 AL105 / AL201（01-架构设计 第 5 节：永不阻断启动，只降级 + 报警）。
+    /// 典型组合：只接了相机、没接运控卡 →
+    /// <c>UseVirtual=false</c> + <c>MotionCard:Type=Virtual</c> + <c>Camera:Type=Hikvision</c>，
+    /// 运控卡按配置走虚拟（不算故障，不报 AL105），相机走真实。
     /// </summary>
     private static void RegisterHardware(IServiceCollection services, IConfiguration configuration)
     {
         var useVirtual = bool.TryParse(configuration["Hardware:UseVirtual"], out var value) && value;
+
+        var motionVirtual = ResolveDeviceVirtual(configuration, "Hardware:MotionCard:Type", useVirtual);
+        var cameraVirtual = ResolveDeviceVirtual(configuration, "Hardware:Camera:Type", useVirtual);
 
         var report = new HardwareStartupReport();
         services.AddSingleton(report);
 
         var (minLimits, maxLimits) = ReadAxisSoftLimits(configuration);
 
-        if (useVirtual)
+        if (motionVirtual)
         {
             // IMotionCard：软限位来自 appsettings 的 Hardware:MotionCard:Axes
             services.AddSingleton<IMotionCard>(sp =>
@@ -491,10 +499,6 @@ public partial class App : Application
                                             ReadInitialDiStates(configuration),
                                             log);
             });
-
-            services.AddSingleton<ICamera>(sp => CreateVirtualCamera(
-                configuration,
-                sp.GetRequiredService<ILogger<VirtualCamera>>()));
         }
         else
         {
@@ -538,7 +542,16 @@ public partial class App : Application
                                                dllLock,
                                                sp.GetRequiredService<ILogger<MotionCardIoService>>());
             });
+        }
 
+        if (cameraVirtual)
+        {
+            services.AddSingleton<ICamera>(sp => CreateVirtualCamera(
+                configuration,
+                sp.GetRequiredService<ILogger<VirtualCamera>>()));
+        }
+        else
+        {
             services.AddSingleton<ICamera>(sp =>
             {
                 var options = ReadHikvisionCameraOptions(configuration);
@@ -560,6 +573,39 @@ public partial class App : Application
 
         // 采集线程：200ms 读一次轴与 IO，产出 DeviceSnapshot 供手动页 / IO 页消费（S4）
         services.AddSingleton<IDeviceMonitor, DeviceMonitor>();
+    }
+
+    /// <summary>
+    /// 解析单台设备是否走 Virtual：<c>Virtual</c> → 虚拟；<c>Leadshine</c> / <c>Hikvision</c> / <c>Real</c> → 真实；
+    /// 留空或无法识别 → 跟随全局 <c>Hardware:UseVirtual</c>（无法识别时额外记一条警告，方便发现拼写错误）。
+    /// </summary>
+    /// <param name="configuration">配置。</param>
+    /// <param name="typeKey">设备类型配置键，如 <c>Hardware:Camera:Type</c>。</param>
+    /// <param name="useVirtual">全局开关。</param>
+    private static bool ResolveDeviceVirtual(IConfiguration configuration, string typeKey, bool useVirtual)
+    {
+        var type = configuration[typeKey]?.Trim();
+
+        if (string.IsNullOrEmpty(type))
+        {
+            return useVirtual;
+        }
+
+        if (type.Equals("Virtual", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (type.Equals("Real", StringComparison.OrdinalIgnoreCase)
+            || type.Equals("Leadshine", StringComparison.OrdinalIgnoreCase)
+            || type.Equals("Hikvision", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        Log.Warning("设备类型 {DeviceType}（{ConfigKey}）无法识别，按 Hardware:UseVirtual={UseVirtual} 处理",
+                    type, typeKey, useVirtual);
+        return useVirtual;
     }
 
     /// <summary>
@@ -905,10 +951,18 @@ public partial class App : Application
             : Path.Combine(AppContext.BaseDirectory, configured);
     }
 
+    /// <summary>
+    /// 启动日志用的硬件模式描述。按设备分别解析，便于一眼看出「运控卡虚拟 + 相机真实」这类混合配置
+    /// （只接了相机、没接运控卡时的常用组合）。
+    /// </summary>
     private static string ResolveHardwareMode(IConfiguration configuration)
-        => bool.TryParse(configuration["Hardware:UseVirtual"], out var useVirtual) && useVirtual
-            ? "Virtual"
-            : "Real";
+    {
+        var useVirtual = bool.TryParse(configuration["Hardware:UseVirtual"], out var value) && value;
+        var motion = ResolveDeviceVirtual(configuration, "Hardware:MotionCard:Type", useVirtual);
+        var camera = ResolveDeviceVirtual(configuration, "Hardware:Camera:Type", useVirtual);
+
+        return $"运控卡={(motion ? "Virtual" : "Real")}，相机={(camera ? "Virtual" : "Real")}";
+    }
 
     private void RegisterGlobalExceptionHandlers()
     {

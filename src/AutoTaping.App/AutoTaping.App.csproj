@@ -33,6 +33,17 @@
     <ProjectReference Include="..\AutoTaping.Data\AutoTaping.Data.csproj" />
   </ItemGroup>
 
+  <!-- 海康 MVS 托管封装：这里必须再登记一次引用（$(MvsNetDll) 由根目录 Directory.Build.props 探测）。
+       不登记的话：dll 虽然被 Hardware 复制到了输出目录，但 AutoTaping.App.deps.json 里没有这条，
+       .NET Core 只按 deps.json 建 TPA 列表解析程序集 → 运行时报
+       FileNotFoundException: Could not load file or assembly 'MvCameraControl.Net' → 相机降级 Virtual。 -->
+  <ItemGroup Condition="'$(MvsNetDll)' != ''">
+    <Reference Include="MvCameraControl.Net">
+      <HintPath>$(MvsNetDll)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
   <ItemGroup>
     <!-- 配置文件必须随可执行文件一起输出，否则启动时读不到（LogPath / 轴参数 / IO 映射都来自这里） -->
     <None Update="appsettings.json">
