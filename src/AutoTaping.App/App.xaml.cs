@@ -381,6 +381,11 @@ public partial class App : Application
             .MinimumLevel.Debug()
             .Enrich.FromLogContext()
             .WriteTo.Console()
+            // 同时写 VS「输出 → 调试」窗口：调硬件时不用来回切日志文件。
+            // 注意：只有调试器附加（VS 里 F5/Debug 启动）时才看得到；程序独立运行时以文件日志为准。
+            .WriteTo.Debug(
+                restrictedToMinimumLevel: LogEventLevel.Debug,
+                outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
             .WriteTo.File(
                 path: logPath,
                 restrictedToMinimumLevel: LogEventLevel.Debug,

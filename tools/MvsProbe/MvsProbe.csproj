@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 相机冒烟测试工具（不属于主解决方案，现场调试时单独 dotnet run）。
+       用途：在不开 UI 的情况下验证「枚举 → 打开 → 设参数 → 软触发取一帧 → 存 BMP」整条链路。 -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- 与主程序一致：MVS 原生库必须与进程位数匹配 -->
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AutoTaping.Hardware\AutoTaping.Hardware.csproj" />
+  </ItemGroup>
+
+</Project>

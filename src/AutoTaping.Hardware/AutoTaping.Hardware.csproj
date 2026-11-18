@@ -10,18 +10,41 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <!-- 海康 MVS SDK（MvCameraControl.Net）为可选依赖：仅当 libs/ 下存在该 dll 时才编译真实相机实现。
-       接入步骤：把 MvCameraControl.Net.dll 放到 src/AutoTaping.Hardware/libs/ 后重新编译，
-       自动定义 HAS_MVS 常量并引用该程序集；否则编译 HikvisionCamera 的占位实现（降级 Virtual + AL201）。 -->
-  <PropertyGroup Condition="Exists('$(MSBuildThisFileDirectory)libs\MvCameraControl.Net.dll')">
+  <!-- 海康 MVS SDK（MvCameraControl.Net）为可选依赖：探测到 .NET 封装 dll 时才编译真实相机实现（HAS_MVS）。
+       探测顺序：
+         1) src/AutoTaping.Hardware/libs/MvCameraControl.Net.dll（**已放入 MVS 4.9 官方封装，推荐**，
+            不依赖任何环境变量，克隆仓库即可编译）
+         2) 环境变量 MVCAM_COMMON_RUNENV 指向的 MVS 安装目录（MVS 5.x 布局为
+            DotNet\AnyCpu\netstandard2.0\，老版本为 DotNet\win64\）
+       都找不到时编译 HikvisionCamera 的占位实现（降级 Virtual + AL201），工程照常可编译可运行。
+       机型无关：MV-CA060-10GM 等 MVS 4.x/5.x 支持的机型共用同一套调用。
+       注意：原生库（MvCameraControl.dll 等）由 MVS 安装程序写入 PATH，不在本工程复制。 -->
+  <PropertyGroup>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and Exists('$(MSBuildThisFileDirectory)libs\MvCameraControl.Net.dll')">$(MSBuildThisFileDirectory)libs\MvCameraControl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and Exists('$(MSBuildThisFileDirectory)libs\MvCamCtrl.Net.dll')">$(MSBuildThisFileDirectory)libs\MvCamCtrl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and '$(MVCAM_COMMON_RUNENV)' != '' and Exists('$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\netstandard2.0\MvCameraControl.Net.dll')">$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\netstandard2.0\MvCameraControl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and '$(MVCAM_COMMON_RUNENV)' != '' and Exists('$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\MvCameraControl.Net.dll')">$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\MvCameraControl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and '$(MVCAM_COMMON_RUNENV)' != '' and Exists('$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\MvCamCtrl.Net.dll')">$(MVCAM_COMMON_RUNENV)\DotNet\AnyCpu\MvCamCtrl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and '$(MVCAM_COMMON_RUNENV)' != '' and Exists('$(MVCAM_COMMON_RUNENV)\DotNet\win64\netstandard2.0\MvCameraControl.Net.dll')">$(MVCAM_COMMON_RUNENV)\DotNet\win64\netstandard2.0\MvCameraControl.Net.dll</MvsNetDll>
+    <MvsNetDll Condition="'$(MvsNetDll)' == '' and '$(MVCAM_COMMON_RUNENV)' != '' and Exists('$(MVCAM_COMMON_RUNENV)\DotNet\win64\MvCameraControl.Net.dll')">$(MVCAM_COMMON_RUNENV)\DotNet\win64\MvCameraControl.Net.dll</MvsNetDll>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MvsNetDll)' != ''">
     <DefineConstants>$(DefineConstants);HAS_MVS</DefineConstants>
   </PropertyGroup>
 
-  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)libs\MvCameraControl.Net.dll')">
+  <ItemGroup Condition="'$(MvsNetDll)' != ''">
     <Reference Include="MvCameraControl.Net">
-      <HintPath>$(MSBuildThisFileDirectory)libs\MvCameraControl.Net.dll</HintPath>
+      <HintPath>$(MvsNetDll)</HintPath>
+      <!-- 复制到输出目录，运行时不需要开发机能访问原路径 -->
       <Private>true</Private>
     </Reference>
   </ItemGroup>
+
+  <!-- 编译时打印实际选用的 MVS 封装，便于确认 HAS_MVS 是否生效 -->
+  <Target Name="ReportMvsSdk" BeforeTargets="CoreCompile">
+    <Message Importance="high" Condition="'$(MvsNetDll)' != ''" Text="海康 MVS: 使用 $(MvsNetDll)（HAS_MVS 已启用）" />
+    <Message Importance="high" Condition="'$(MvsNetDll)' == ''" Text="海康 MVS: 未找到 MvCameraControl.Net.dll，编译占位相机实现（降级 Virtual）" />
+  </Target>
 
 </Project>

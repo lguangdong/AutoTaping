@@ -19,7 +19,11 @@ public sealed class HikvisionCameraOptions
     /// <summary>增益（dB），默认 0（优先调曝光而非增益）。</summary>
     public double GainDb { get; init; } = 0.0;
 
-    /// <summary>触发模式，默认 Software（软触发）。</summary>
+    /// <summary>
+    /// 触发源（对应相机节点 TriggerSource）：<c>Software</c> 为软触发（默认，由上位机逐个触发）；
+    /// 硬件触发填 <c>Line0</c> / <c>Line1</c> 等，此时上位机不再发 TriggerSoftware 命令。
+    /// TriggerMode 恒设为 On。
+    /// </summary>
     public string TriggerMode { get; init; } = "Software";
 
     /// <summary>取图超时（ms），默认 3000。</summary>
