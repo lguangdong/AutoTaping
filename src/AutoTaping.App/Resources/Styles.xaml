@@ -386,7 +386,12 @@
         </Border>
     </DataTemplate>
 
-    <!--  ===================== 下拉框（高度 48，深色主题；仅设外观，不改系统模板） =====================  -->
+    <!--
+        下拉框（高度 48，深色主题）。
+        必须自定义模板：系统模板的弹出层底色取自 SystemColors.WindowBrush（浅色），而全局 TextBlock 样式
+        把文字固定为白色，ItemTemplate 里的 TextBlock 又不吃 ComboBoxItem.Foreground，于是必然「白底白字」。
+        这里把弹出层改成 BgPanel 深色，主框与项统一深色底 + 白字，任何主题下都清晰。
+    -->
     <Style TargetType="ComboBox">
         <Setter Property="MinHeight" Value="{StaticResource InputMinHeight}" />
         <Setter Property="MinWidth" Value="{StaticResource ButtonMinWidth}" />
@@ -397,6 +402,151 @@
         <Setter Property="BorderBrush" Value="{StaticResource BorderNormal}" />
         <Setter Property="Padding" Value="{StaticResource SpacingSmall}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="MaxDropDownHeight" Value="360" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <!--  主框：整块可点，点击切换展开  -->
+                        <ToggleButton
+                            x:Name="ToggleButton"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            ClickMode="Press"
+                            Focusable="False"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource ControlCornerRadius}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Path
+                                                Grid.Column="1"
+                                                Margin="0,0,16,0"
+                                                VerticalAlignment="Center"
+                                                Data="M 0 0 L 6 6 L 12 0"
+                                                Stroke="{StaticResource TextSecondary}"
+                                                StrokeThickness="2" />
+                                        </Grid>
+                                    </Border>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+
+                        <!--  选中项显示（不参与命中测试，点击穿透到 ToggleButton）  -->
+                        <ContentPresenter
+                            x:Name="ContentSite"
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding SelectionBoxItem}"
+                            ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                            ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                            IsHitTestVisible="False"
+                            TextElement.Foreground="{StaticResource TextPrimary}" />
+
+                        <!--  弹出层：深色底，与页面主题一致  -->
+                        <Popup
+                            x:Name="PART_Popup"
+                            AllowsTransparency="True"
+                            Focusable="False"
+                            IsOpen="{TemplateBinding IsDropDownOpen}"
+                            Placement="Bottom"
+                            PopupAnimation="Fade">
+                            <Border
+                                MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                Background="{StaticResource BgPanel}"
+                                BorderBrush="{StaticResource BorderNormal}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource ControlCornerRadius}">
+                                <ScrollViewer SnapsToDevicePixels="True">
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--  下拉项：深色底 + 白字，悬停用主色、选中用卡片色，保持 48 触摸高度  -->
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+        <Setter Property="FontFamily" Value="{StaticResource FontFamilyBase}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="Padding" Value="{StaticResource SpacingSmall}" />
+        <Setter Property="MinHeight" Value="{StaticResource InputMinHeight}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border
+                        x:Name="Bd"
+                        Background="{TemplateBinding Background}"
+                        SnapsToDevicePixels="True">
+                        <ContentPresenter
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                            SnapsToDevicePixels="True" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource BgCard}" />
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource BtnPrimary}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{StaticResource TextDisabled}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--  ===================== 行程条（四轴实时位置：0~100 百分比，细条不抢视线） =====================  -->
+    <Style x:Key="AxisRangeBar" TargetType="ProgressBar">
+        <Setter Property="Height" Value="8" />
+        <Setter Property="Minimum" Value="0" />
+        <Setter Property="Maximum" Value="100" />
+        <Setter Property="Foreground" Value="{StaticResource StatusInfo}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ProgressBar">
+                    <!--  必须是 PART_Track：ProgressBar 用它取总长度，再按 Value/Maximum 设置 PART_Indicator 的宽度  -->
+                    <Grid x:Name="PART_Track">
+                        <Border
+                            Background="{StaticResource BgMain}"
+                            BorderBrush="{StaticResource BorderNormal}"
+                            BorderThickness="1"
+                            CornerRadius="4" />
+                        <Border
+                            x:Name="PART_Indicator"
+                            HorizontalAlignment="Left"
+                            Background="{TemplateBinding Foreground}"
+                            CornerRadius="4" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!--  ===================== 状态栏文字（07-UI设计规范 第 5.1 节） =====================  -->

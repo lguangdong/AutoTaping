@@ -2,6 +2,7 @@
 // 层：Vision
 // 依赖：IVisionService/VisionParameters/Calibration/VisionCorrection（Core）、TemplateMatcher/CorrectionService/CalibrationResult/ImageConverter（Vision）、OpenCvSharp4
 
+using System.Diagnostics;
 using AutoTaping.Core.Abstractions;
 using AutoTaping.Core.Models;
 using OpenCvSharp;
@@ -52,6 +53,8 @@ public sealed class VisionService : IVisionService
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        var stopwatch = Stopwatch.StartNew();
+
         // 搜索区域必须显著大于模板：等于模板尺寸时只有一个候选位置，匹配必然"高分"且坐标恒为区域中心
         var templateSize = Math.Max(_matcher1.TemplateWidth, _matcher2.TemplateWidth);
         if (!_vision.IsSearchRoiUsable(templateSize))
@@ -60,7 +63,8 @@ public sealed class VisionService : IVisionService
             {
                 Success = false,
                 Error = VisionCorrectionError.MarkNotFound,
-                ErrorDetail = $"搜索区域过小（{_vision.SearchRoi.W}×{_vision.SearchRoi.H}，模板 {templateSize}px），请在配方参数中重置搜索区域"
+                ErrorDetail = $"搜索区域过小（{_vision.SearchRoi.W}×{_vision.SearchRoi.H}，模板 {templateSize}px），请在配方参数中重置搜索区域",
+                ElapsedMs = (int)stopwatch.ElapsedMilliseconds
             };
         }
 
@@ -77,7 +81,8 @@ public sealed class VisionService : IVisionService
             {
                 Success = false,
                 Error = VisionCorrectionError.MarkNotFound,
-                ErrorDetail = "MARK 识别失败，请检查光照与模板"
+                ErrorDetail = "MARK 识别失败，请检查光照与模板",
+                ElapsedMs = (int)stopwatch.ElapsedMilliseconds
             };
         }
 
@@ -93,7 +98,14 @@ public sealed class VisionService : IVisionService
             {
                 Success = false,
                 Error = VisionCorrectionError.MarkNotFound,
-                ErrorDetail = $"两个 MARK 间距异常（实测 {actualDistance:F1}px，标称 {expectedDistance:F1}px），请检查标记与搜索区域"
+                ErrorDetail = $"两个 MARK 间距异常（实测 {actualDistance:F1}px，标称 {expectedDistance:F1}px），请检查标记与搜索区域",
+                Mark1X = mark1.Value.Center.X,
+                Mark1Y = mark1.Value.Center.Y,
+                Mark2X = mark2.Value.Center.X,
+                Mark2Y = mark2.Value.Center.Y,
+                Score1 = mark1.Value.Score,
+                Score2 = mark2.Value.Score,
+                ElapsedMs = (int)stopwatch.ElapsedMilliseconds
             };
         }
 
@@ -103,7 +115,14 @@ public sealed class VisionService : IVisionService
             {
                 Success = false,
                 Error = VisionCorrectionError.NoCalibration,
-                ErrorDetail = "无生效标定，请先执行九点标定"
+                ErrorDetail = "无生效标定，请先执行九点标定",
+                Mark1X = mark1.Value.Center.X,
+                Mark1Y = mark1.Value.Center.Y,
+                Mark2X = mark2.Value.Center.X,
+                Mark2Y = mark2.Value.Center.Y,
+                Score1 = mark1.Value.Score,
+                Score2 = mark2.Value.Score,
+                ElapsedMs = (int)stopwatch.ElapsedMilliseconds
             };
         }
 
@@ -117,7 +136,14 @@ public sealed class VisionService : IVisionService
             {
                 Success = false,
                 Error = VisionCorrectionError.CorrectionExceeded,
-                ErrorDetail = correction.Message
+                ErrorDetail = correction.Message,
+                Mark1X = mark1.Value.Center.X,
+                Mark1Y = mark1.Value.Center.Y,
+                Mark2X = mark2.Value.Center.X,
+                Mark2Y = mark2.Value.Center.Y,
+                Score1 = mark1.Value.Score,
+                Score2 = mark2.Value.Score,
+                ElapsedMs = (int)stopwatch.ElapsedMilliseconds
             };
         }
 
@@ -129,7 +155,12 @@ public sealed class VisionService : IVisionService
             DeltaTheta = correction.DeltaTheta,
             Score1 = mark1.Value.Score,
             Score2 = mark2.Value.Score,
-            Error = VisionCorrectionError.None
+            Mark1X = mark1.Value.Center.X,
+            Mark1Y = mark1.Value.Center.Y,
+            Mark2X = mark2.Value.Center.X,
+            Mark2Y = mark2.Value.Center.Y,
+            Error = VisionCorrectionError.None,
+            ElapsedMs = (int)stopwatch.ElapsedMilliseconds
         };
     }
 
@@ -144,7 +175,6 @@ public sealed class VisionService : IVisionService
         _disposed = true;
         _matcher1.Dispose();
         _matcher2.Dispose();
-        GC.SuppressFinalize(this);
     }
 
     /// <summary>加载模板；文件缺失时按配方半径生成合成实心圆模板（虚拟模式演示用）。</summary>

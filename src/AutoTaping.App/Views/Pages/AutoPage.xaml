@@ -1,5 +1,5 @@
 <!--
-    职责：自动运行页（主画面）——工位状态与流转箭头 + 2.5D 侧视示意图 + 实时曲线 + 数值/统计/通讯
+    职责：自动运行页（主画面）——工位状态与流转箭头 + 四轴实时位置 + 实时曲线 + 数值/统计/通讯
           （08-页面清单 页面 1，只读页面，无任何修改操作）
     层：App/Views/Pages
     依赖：Resources/Colors.xaml、Resources/Styles.xaml、Converters（颜色/字号/尺寸全部引用资源字典）
@@ -12,18 +12,167 @@
 
     <UserControl.Resources>
         <converters:DeviceStateToBrushConverter x:Key="DeviceStateToBrush" />
+
+        <!-- 四轴实时位置卡：轴名 + 状态灯 / 位置数值 / 行程条 / 行程范围 -->
+        <DataTemplate x:Key="AxisReadoutTemplate">
+            <Border Background="{StaticResource BgCard}"
+                    CornerRadius="{StaticResource ControlCornerRadius}"
+                    Padding="{StaticResource SpacingSmall}"
+                    Margin="0,0,8,8">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0">
+                        <TextBlock Text="{Binding AxisName}"
+                                   FontSize="{StaticResource FontSizeGroupTitle}"
+                                   FontWeight="Bold" />
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center">
+                            <!-- 灰 未回零 · 黄 运动中 · 绿 到位 · 红 限位/驱动报警 -->
+                            <Ellipse Width="{StaticResource StatusLampSize}"
+                                     Height="{StaticResource StatusLampSize}">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="{StaticResource StatusWait}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsHomed}" Value="False">
+                                                <Setter Property="Fill" Value="{StaticResource StatusIdle}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding InPosition}" Value="True">
+                                                <Setter Property="Fill" Value="{StaticResource StatusRun}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding HasFault}" Value="True">
+                                                <Setter Property="Fill" Value="{StaticResource StatusAlarm}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                            <TextBlock Text="{Binding StateText}"
+                                       Style="{StaticResource StatusLabelText}"
+                                       Margin="8,0,0,0" />
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Grid.Row="1"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="{Binding PositionText}"
+                                   FontFamily="{StaticResource FontFamilyNumeric}"
+                                   FontSize="{StaticResource FontSizeNumeric}"
+                                   FontWeight="Bold" />
+                        <TextBlock Text="{Binding Unit}"
+                                   Style="{StaticResource UnitText}"
+                                   VerticalAlignment="Bottom"
+                                   Margin="4,0,0,4" />
+                    </StackPanel>
+
+                    <ProgressBar Grid.Row="2"
+                                 Value="{Binding LimitPercent, Mode=OneWay}"
+                                 Margin="0,8,0,4">
+                        <ProgressBar.Style>
+                            <Style TargetType="ProgressBar" BasedOn="{StaticResource AxisRangeBar}">
+                                <Setter Property="Foreground" Value="{StaticResource StatusInfo}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding NearLimit}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource StatusWarn}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ProgressBar.Style>
+                    </ProgressBar>
+
+                    <TextBlock Grid.Row="3"
+                               Text="{Binding RangeText}"
+                               Style="{StaticResource HintText}"
+                               HorizontalAlignment="Center" />
+                </Grid>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid Margin="{StaticResource SpacingLarge}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="260" />
         </Grid.RowDefinitions>
 
-        <!-- ==================== 顶部横幅（未回零 / 未选择配方） ==================== -->
+        <!-- ==================== 顶部状态条 + 异常横幅 ==================== -->
         <StackPanel Grid.Row="0">
+            <Border Style="{StaticResource PanelBorder}" Margin="0,0,0,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="24" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="24" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="24" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="24" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 状态灯 + 状态文字 -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="{StaticResource StatusLampSize}"
+                                 Height="{StaticResource StatusLampSize}"
+                                 Fill="{Binding State, Converter={StaticResource DeviceStateToBrush}}"
+                                 VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding StateText}"
+                                   FontSize="{StaticResource FontSizeGroupTitle}"
+                                   FontWeight="Bold"
+                                   Margin="8,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- 当前步骤 -->
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding StepText}"
+                               FontFamily="{StaticResource FontFamilyNumeric}"
+                               FontSize="{StaticResource FontSizeBody}"
+                               VerticalAlignment="Center" />
+
+                    <!-- 节拍 -->
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="节拍" Style="{StaticResource StatusLabelText}" Margin="0,0,8,0" />
+                        <TextBlock Text="{Binding CycleTimeText}"
+                                   FontFamily="{StaticResource FontFamilyNumeric}"
+                                   FontSize="{StaticResource FontSizeBody}"
+                                   FontWeight="Bold" />
+                    </StackPanel>
+
+                    <!-- 真空 -->
+                    <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="真空" Style="{StaticResource StatusLabelText}" Margin="0,0,8,0" />
+                        <TextBlock Text="{Binding VacuumText}" Style="{StaticResource StatusValueText}" />
+                    </StackPanel>
+
+                    <!-- 气压 -->
+                    <StackPanel Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="气压" Style="{StaticResource StatusLabelText}" Margin="0,0,8,0" />
+                        <TextBlock Text="{Binding PressureText}" Style="{StaticResource StatusValueText}" />
+                    </StackPanel>
+
+                    <!-- 连续运行 -->
+                    <StackPanel Grid.Column="9" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="连续运行" Style="{StaticResource StatusLabelText}" Margin="0,0,8,0" />
+                        <TextBlock Text="{Binding RunTimeText}"
+                                   FontFamily="{StaticResource FontFamilyNumeric}"
+                                   FontSize="{StaticResource FontSizeBody}"
+                                   FontWeight="Bold" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
             <Border Background="{StaticResource StatusWait}"
                     CornerRadius="{StaticResource ControlCornerRadius}"
                     Padding="{StaticResource SpacingMedium}"
@@ -44,10 +193,23 @@
             </Border>
         </StackPanel>
 
-        <!-- ==================== 工艺流程图（4 工位状态点 + 流转箭头，点击查看详情） ==================== -->
-        <Border Grid.Row="1"
+        <!-- ==================== 四宫格：流程 / 视觉 / 运动 / 统计 ==================== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+        <!-- ==================== 左上：工艺流程进度（4 工位状态点 + 流转箭头，点击查看详情） ==================== -->
+        <Border Grid.Row="0" Grid.Column="0"
                 Style="{StaticResource PanelBorder}"
-                Margin="0,0,0,16">
+                Margin="0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -310,299 +472,338 @@
             </Grid>
         </Border>
 
-        <!-- ==================== 2.5D 侧视示意图（贴胶头按 X/Z 实时位置映射） ==================== -->
-        <Border Grid.Row="2"
+        <!-- ==================== 左下：运动 · 四轴实时位置 ==================== -->
+        <Border Grid.Row="2" Grid.Column="0"
                 Style="{StaticResource PanelBorder}"
-                Margin="0,0,0,16">
+                Margin="0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <Grid Grid.Row="0" Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="设备侧视示意" Style="{StaticResource GroupTitleText}" />
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding HeadPositionText}"
-                               FontFamily="{StaticResource FontFamilyNumeric}"
-                               FontSize="{StaticResource FontSizeHint}"
-                               Foreground="{StaticResource TextSecondary}"
+                <Grid Grid.Row="0" Margin="0,0,0,12">
+                    <TextBlock Text="运动 · 四轴实时位置" Style="{StaticResource GroupTitleText}" />
+                    <TextBlock Text="行程条按软限位换算；绿点 到位 · 黄点 运动中"
+                               Style="{StaticResource HintText}"
                                HorizontalAlignment="Right"
                                VerticalAlignment="Center" />
                 </Grid>
 
-                <!-- 画布固定 800×200 设计尺寸，由 Viewbox 等比缩放填满面板 -->
-                <Viewbox Grid.Row="1" Stretch="Uniform" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                    <Canvas Width="800" Height="200" ClipToBounds="True">
-
-                        <!-- 台面 -->
-                        <Rectangle Canvas.Left="0" Canvas.Top="156" Width="800" Height="12"
-                                   Fill="{StaticResource BgCard}"
-                                   Stroke="{StaticResource BorderNormal}" StrokeThickness="1" />
-                        <TextBlock Canvas.Left="768" Canvas.Top="170" Text="台面"
-                                   FontSize="12" Foreground="{StaticResource TextDisabled}" />
-
-                        <!-- X 导轨（横梁） -->
-                        <Rectangle Canvas.Left="0" Canvas.Top="18" Width="800" Height="8"
-                                   Fill="{StaticResource BorderNormal}" />
-                        <TextBlock Canvas.Left="8" Canvas.Top="2" Text="X 导轨"
-                                   FontSize="12" Foreground="{StaticResource TextDisabled}" />
-
-                        <!-- 四个工位标记（台面上的料位） -->
-                        <Rectangle Canvas.Left="20" Canvas.Top="146" Width="150" Height="10" RadiusX="2" RadiusY="2">
-                            <Rectangle.Style>
-                                <Style TargetType="Rectangle">
-                                    <Setter Property="Fill" Value="{StaticResource BorderNormal}" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding LoadActive}" Value="True">
-                                            <Setter Property="Fill" Value="{StaticResource StatusRun}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Rectangle.Style>
-                        </Rectangle>
-                        <TextBlock Canvas.Left="20" Canvas.Top="170" Width="150" Text="上料位"
-                                   FontSize="14" TextAlignment="Center" Foreground="{StaticResource TextSecondary}" />
-
-                        <Rectangle Canvas.Left="215" Canvas.Top="146" Width="150" Height="10" RadiusX="2" RadiusY="2">
-                            <Rectangle.Style>
-                                <Style TargetType="Rectangle">
-                                    <Setter Property="Fill" Value="{StaticResource BorderNormal}" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding PhotoActive}" Value="True">
-                                            <Setter Property="Fill" Value="{StaticResource StatusRun}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Rectangle.Style>
-                        </Rectangle>
-                        <TextBlock Canvas.Left="215" Canvas.Top="170" Width="150" Text="拍照位"
-                                   FontSize="14" TextAlignment="Center" Foreground="{StaticResource TextSecondary}" />
-
-                        <Rectangle Canvas.Left="410" Canvas.Top="146" Width="150" Height="10" RadiusX="2" RadiusY="2">
-                            <Rectangle.Style>
-                                <Style TargetType="Rectangle">
-                                    <Setter Property="Fill" Value="{StaticResource BorderNormal}" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding TapeActive}" Value="True">
-                                            <Setter Property="Fill" Value="{StaticResource StatusRun}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Rectangle.Style>
-                        </Rectangle>
-                        <TextBlock Canvas.Left="410" Canvas.Top="170" Width="150" Text="贴附位"
-                                   FontSize="14" TextAlignment="Center" Foreground="{StaticResource TextSecondary}" />
-
-                        <Rectangle Canvas.Left="605" Canvas.Top="146" Width="150" Height="10" RadiusX="2" RadiusY="2">
-                            <Rectangle.Style>
-                                <Style TargetType="Rectangle">
-                                    <Setter Property="Fill" Value="{StaticResource BorderNormal}" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding UnloadActive}" Value="True">
-                                            <Setter Property="Fill" Value="{StaticResource StatusRun}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Rectangle.Style>
-                        </Rectangle>
-                        <TextBlock Canvas.Left="605" Canvas.Top="170" Width="150" Text="下料位"
-                                   FontSize="14" TextAlignment="Center" Foreground="{StaticResource TextSecondary}" />
-
-                        <!-- 贴胶头：Left 由 X 轴位置映射，Top 由 Z 轴位置映射（Z 越大越靠上） -->
-                        <Canvas Width="48" Height="60"
-                                Canvas.Left="{Binding HeadCanvasLeft}"
-                                Canvas.Top="{Binding HeadCanvasTop}">
-                            <Rectangle Width="48" Height="34"
-                                       Fill="{StaticResource BgCard}"
-                                       Stroke="{StaticResource StatusInfo}" StrokeThickness="2" />
-                            <TextBlock Canvas.Left="14" Canvas.Top="6" Text="Z" FontSize="14" FontWeight="Bold" />
-                            <!-- 吸嘴：真空吸住时变绿 -->
-                            <Rectangle Canvas.Left="18" Canvas.Top="34" Width="12" Height="16">
-                                <Rectangle.Style>
-                                    <Style TargetType="Rectangle">
-                                        <Setter Property="Fill" Value="{StaticResource BorderNormal}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding VacuumOn}" Value="True">
-                                                <Setter Property="Fill" Value="{StaticResource StatusRun}" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Rectangle.Style>
-                            </Rectangle>
-                        </Canvas>
-                    </Canvas>
-                </Viewbox>
+                <ItemsControl Grid.Row="1"
+                              ItemsSource="{Binding Axes}"
+                              ItemTemplate="{StaticResource AxisReadoutTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="2" Rows="2" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
             </Grid>
         </Border>
 
-        <!-- ==================== 实时曲线 + 状态数据 / 通讯状态 ==================== -->
-        <Grid Grid.Row="3">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="16" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <!-- 实时曲线（08-页面清单 页面 1：Polyline ×2，最近 300 点） -->
-            <Border Grid.Column="0" Style="{StaticResource PanelBorder}">
+        <!-- ==================== 右下：统计 · 当班 ==================== -->
+        <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource PanelBorder}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,12">
+                        <TextBlock Text="统计 · 当班" Style="{StaticResource GroupTitleText}" />
+                        <TextBlock Text="{Binding ShiftNameText}"
+                                   Style="{StaticResource HintText}"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+
+                    <UniformGrid Grid.Row="1" Columns="2" Rows="2">
+                        <!-- 本班产量 / 目标 -->
+                        <StackPanel Margin="0,0,0,8">
+                            <TextBlock Text="本班产量 / 目标" Style="{StaticResource StatusLabelText}" />
+                            <TextBlock Text="{Binding ShiftOutputText}"
+                                       Style="{StaticResource NumericText}"
+                                       Margin="0,4,0,0" />
+                            <ProgressBar Value="{Binding ShiftProgress, Mode=OneWay}"
+                                         Style="{StaticResource AxisRangeBar}"
+                                         Margin="0,6,0,4" />
+                            <TextBlock Text="{Binding ShiftProgressText}" Style="{StaticResource HintText}" />
+                        </StackPanel>
+
+                        <!-- 实际节拍 -->
+                        <StackPanel Margin="0,0,0,8">
+                            <TextBlock Text="实际节拍" Style="{StaticResource StatusLabelText}" />
+                            <TextBlock Text="{Binding CycleTimeText}"
+                                       Style="{StaticResource NumericText}"
+                                       Margin="0,4,0,0" />
+                            <TextBlock Text="{Binding StandardCycleText}"
+                                       Style="{StaticResource HintText}"
+                                       Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <!-- 实际 UPH -->
+                        <StackPanel>
+                            <TextBlock Text="实际 UPH（件/时）" Style="{StaticResource StatusLabelText}" />
+                            <TextBlock Text="{Binding UphText}"
+                                       Style="{StaticResource NumericText}"
+                                       Margin="0,4,0,0" />
+                            <TextBlock Text="{Binding AvailabilityText}"
+                                       Style="{StaticResource HintText}"
+                                       Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <!-- 当班停机 -->
+                        <StackPanel>
+                            <TextBlock Text="当班停机" Style="{StaticResource StatusLabelText}" />
+                            <TextBlock Text="{Binding DowntimeText}"
+                                       Style="{StaticResource NumericText}"
+                                       Margin="0,4,0,0" />
+                            <TextBlock Text="{Binding DowntimeTopText}"
+                                       Style="{StaticResource HintText}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,4,0,0" />
+                        </StackPanel>
+                    </UniformGrid>
+                </Grid>
+            </Border>
+
+        <!-- ==================== 右上：视觉 · 最近识别 ==================== -->
+            <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource PanelBorder}">
+                <Grid>
+                    <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <Grid Grid.Row="0" Margin="0,0,0,4">
-                        <TextBlock Text="X 轴位置（最近 300 点）" Style="{StaticResource StatusLabelText}" />
-                        <TextBlock Text="{Binding XCurveValueText}"
-                                   FontFamily="{StaticResource FontFamilyNumeric}"
-                                   Style="{StaticResource StatusValueText}"
-                                   HorizontalAlignment="Right" />
-                    </Grid>
-                    <Border Grid.Row="1" Background="{StaticResource BgMain}" Margin="0,0,0,12">
-                        <Viewbox Stretch="Fill" StretchDirection="Both">
-                            <Canvas Width="300" Height="100" ClipToBounds="True">
-                                <Polyline Points="{Binding XCurvePoints}"
-                                          Stroke="{StaticResource StatusInfo}"
-                                          StrokeThickness="2"
-                                          StrokeLineJoin="Round" />
-                            </Canvas>
-                        </Viewbox>
-                    </Border>
+                    <TextBlock Grid.Row="0" Text="视觉 · 最近识别" Style="{StaticResource GroupTitleText}" Margin="0,0,0,12" />
 
-                    <Grid Grid.Row="2" Margin="0,0,0,4">
-                        <TextBlock Text="Z 轴位置（最近 300 点）" Style="{StaticResource StatusLabelText}" />
-                        <TextBlock Text="{Binding ZCurveValueText}"
-                                   FontFamily="{StaticResource FontFamilyNumeric}"
-                                   Style="{StaticResource StatusValueText}"
-                                   HorizontalAlignment="Right" />
-                    </Grid>
-                    <Border Grid.Row="3" Background="{StaticResource BgMain}">
-                        <Viewbox Stretch="Fill" StretchDirection="Both">
-                            <Canvas Width="300" Height="100" ClipToBounds="True">
-                                <Polyline Points="{Binding ZCurvePoints}"
-                                          Stroke="{StaticResource StatusRun}"
-                                          StrokeThickness="2"
-                                          StrokeLineJoin="Round" />
-                            </Canvas>
-                        </Viewbox>
-                    </Border>
-                </Grid>
-            </Border>
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-            <!-- 当班统计 + 贴胶头数值 + 通讯状态 -->
-            <Border Grid.Column="2" Style="{StaticResource PanelBorder}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="16" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
-                    <!-- 左列：当班统计 -->
-                    <StackPanel Grid.Column="0">
-                        <TextBlock Text="当班统计" Style="{StaticResource GroupTitleText}" Margin="0,0,0,8" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="节拍" Style="{StaticResource StatusLabelText}" Margin="0,0,0,4" />
-                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CycleTimeText}" Style="{StaticResource NumericText}" HorizontalAlignment="Right" Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="产量" Style="{StaticResource StatusLabelText}" Margin="0,0,0,4" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding OutputText}" Style="{StaticResource NumericText}" HorizontalAlignment="Right" Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="良率" Style="{StaticResource StatusLabelText}" Margin="0,0,0,4" />
-                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding YieldText}" Style="{StaticResource NumericText}" HorizontalAlignment="Right" Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="连续运行" Style="{StaticResource StatusLabelText}" Margin="0,0,0,4" />
-                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding RunTimeText}" FontFamily="{StaticResource FontFamilyNumeric}" Style="{StaticResource StatusValueText}" HorizontalAlignment="Right" Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="4" Grid.Column="0" Text="最后拍照" Style="{StaticResource StatusLabelText}" />
-                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding LastCaptureText}" FontFamily="{StaticResource FontFamilyNumeric}" Style="{StaticResource StatusValueText}" HorizontalAlignment="Right" />
-                        </Grid>
-                    </StackPanel>
-
-                    <!-- 右列：贴胶头数值 + 通讯状态 -->
-                    <StackPanel Grid.Column="2">
-                        <TextBlock Text="贴胶头" Style="{StaticResource GroupTitleText}" Margin="0,0,0,8" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Z 轴" Style="{StaticResource StatusLabelText}" Margin="0,0,0,4" />
-                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ZText}" Style="{StaticResource StatusValueText}" FontFamily="{StaticResource FontFamilyNumeric}" HorizontalAlignment="Right" Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="R 轴" Style="{StaticResource StatusLabelText}" Margin="0,0,0,4" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RText}" Style="{StaticResource StatusValueText}" FontFamily="{StaticResource FontFamilyNumeric}" HorizontalAlignment="Right" Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="真空" Style="{StaticResource StatusLabelText}" Margin="0,0,0,4" />
-                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding VacuumText}" Style="{StaticResource StatusValueText}" HorizontalAlignment="Right" Margin="0,0,0,4" />
-
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="气压" Style="{StaticResource StatusLabelText}" />
-                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PressureText}" Style="{StaticResource StatusValueText}" HorizontalAlignment="Right" />
-                        </Grid>
-
-                        <TextBlock Text="通讯状态" Style="{StaticResource GroupTitleText}" Margin="0,16,0,8" />
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="{StaticResource StatusLampSize}"
-                                     Height="{StaticResource StatusLampSize}"
-                                     VerticalAlignment="Center"
-                                     Margin="0,0,8,0">
-                                <Ellipse.Style>
-                                    <Style TargetType="Ellipse">
-                                        <Setter Property="Fill" Value="{StaticResource StatusIdle}" />
+                        <StackPanel Grid.Column="0">
+                            <!-- 最近一帧（识别失败时红框，图本身就是排障证据） -->
+                            <Border Width="240"
+                                    Height="192"
+                                    Background="{StaticResource BgMain}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="{StaticResource BorderNormal}" />
+                                        <Setter Property="BorderThickness" Value="1" />
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding CameraOk}" Value="True">
-                                                <Setter Property="Fill" Value="{StaticResource StatusRun}" />
+                                            <DataTrigger Binding="{Binding VisionOk}" Value="False">
+                                                <Setter Property="BorderBrush" Value="{StaticResource StatusAlarm}" />
+                                                <Setter Property="BorderThickness" Value="2" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </Ellipse.Style>
-                            </Ellipse>
-                            <TextBlock Text="相机" Style="{StaticResource StatusValueText}" Margin="0,0,16,0" />
+                                </Border.Style>
+                                <Grid>
+                                    <Image Source="{Binding VisionImage}" Stretch="Uniform" />
 
-                            <Ellipse Width="{StaticResource StatusLampSize}"
-                                     Height="{StaticResource StatusLampSize}"
-                                     VerticalAlignment="Center"
-                                     Margin="0,0,8,0">
-                                <Ellipse.Style>
-                                    <Style TargetType="Ellipse">
-                                        <Setter Property="Fill" Value="{StaticResource StatusIdle}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding MotionOk}" Value="True">
-                                                <Setter Property="Fill" Value="{StaticResource StatusRun}" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Ellipse.Style>
-                            </Ellipse>
-                            <TextBlock Text="运控卡" Style="{StaticResource StatusValueText}" />
+                                    <!-- 两个 MARK 的识别位置 -->
+                                    <Canvas Visibility="{Binding ShowMarks, Converter={StaticResource BoolToVisibility}}">
+                                        <Ellipse Canvas.Left="{Binding Mark1CanvasLeft}"
+                                                 Canvas.Top="{Binding Mark1CanvasTop}"
+                                                 Width="10"
+                                                 Height="10"
+                                                 Stroke="{StaticResource StatusRun}"
+                                                 StrokeThickness="2" />
+                                        <Ellipse Canvas.Left="{Binding Mark2CanvasLeft}"
+                                                 Canvas.Top="{Binding Mark2CanvasTop}"
+                                                 Width="10"
+                                                 Height="10"
+                                                 Stroke="{StaticResource StatusRun}"
+                                                 StrokeThickness="2" />
+                                    </Canvas>
+
+                                    <TextBlock Text="尚未拍照"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource HintText}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding VisionImage}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                            </Border>
+
+                            <!-- MARK 分数趋势：缓慢下降 = 镜头脏 / 光照劣化 / 模板过期 -->
+                            <Border Width="240"
+                                    Height="64"
+                                    Background="{StaticResource BgMain}"
+                                    Margin="0,8,0,0"
+                                    Padding="4">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Text="MARK 分数趋势" Style="{StaticResource HintText}" />
+                                    <Viewbox Grid.Row="1" Stretch="Fill" StretchDirection="Both">
+                                        <Canvas Width="240" Height="48" ClipToBounds="True">
+                                            <Polyline Points="{Binding ScoreTrendPoints}"
+                                                      Stroke="{StaticResource StatusInfo}"
+                                                      StrokeThickness="1.5"
+                                                      StrokeLineJoin="Round" />
+                                        </Canvas>
+                                    </Viewbox>
+                                </Grid>
+                            </Border>
                         </StackPanel>
-                    </StackPanel>
+
+                        <!-- 识别结果与纠偏量 -->
+                        <StackPanel Grid.Column="2">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Ellipse Width="{StaticResource StatusLampSize}"
+                                         Height="{StaticResource StatusLampSize}"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,8,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{StaticResource StatusIdle}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CameraOk}" Value="True">
+                                                    <Setter Property="Fill" Value="{StaticResource StatusRun}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Text="{Binding PhotoStateText}" Style="{StaticResource StatusValueText}" />
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding VisionResultText}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,8">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                        <Setter Property="Foreground" Value="{StaticResource StatusRun}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding VisionOk}" Value="False">
+                                                <Setter Property="Foreground" Value="{StaticResource StatusWarn}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="ΔX" Style="{StaticResource StatusLabelText}" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding VisionDeltaXText}"
+                                           FontFamily="{StaticResource FontFamilyNumeric}"
+                                           Style="{StaticResource StatusValueText}"
+                                           HorizontalAlignment="Right" />
+                            </Grid>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="ΔY" Style="{StaticResource StatusLabelText}" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding VisionDeltaYText}"
+                                           FontFamily="{StaticResource FontFamilyNumeric}"
+                                           Style="{StaticResource StatusValueText}"
+                                           HorizontalAlignment="Right" />
+                            </Grid>
+
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Δθ" Style="{StaticResource StatusLabelText}" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding VisionDeltaThetaText}"
+                                           FontFamily="{StaticResource FontFamilyNumeric}"
+                                           Style="{StaticResource StatusValueText}"
+                                           HorizontalAlignment="Right" />
+                            </Grid>
+
+                            <TextBlock Text="{Binding VisionScoreText}"
+                                       Style="{StaticResource HintText}"
+                                       TextWrapping="Wrap" />
+
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="识别耗时" Style="{StaticResource StatusLabelText}" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding VisionTimeText}"
+                                           FontFamily="{StaticResource FontFamilyNumeric}"
+                                           Style="{StaticResource StatusValueText}"
+                                           HorizontalAlignment="Right" />
+                            </Grid>
+
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="最后拍照" Style="{StaticResource StatusLabelText}" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding LastCaptureText}"
+                                           FontFamily="{StaticResource FontFamilyNumeric}"
+                                           Style="{StaticResource StatusValueText}"
+                                           HorizontalAlignment="Right" />
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Ellipse Width="{StaticResource StatusLampSize}"
+                                         Height="{StaticResource StatusLampSize}"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,8,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{StaticResource StatusIdle}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CameraOk}" Value="True">
+                                                    <Setter Property="Fill" Value="{StaticResource StatusRun}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Text="相机" Style="{StaticResource StatusValueText}" Margin="0,0,16,0" />
+
+                                <Ellipse Width="{StaticResource StatusLampSize}"
+                                         Height="{StaticResource StatusLampSize}"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,8,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{StaticResource StatusIdle}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding MotionOk}" Value="True">
+                                                    <Setter Property="Fill" Value="{StaticResource StatusRun}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Text="运控卡" Style="{StaticResource StatusValueText}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>

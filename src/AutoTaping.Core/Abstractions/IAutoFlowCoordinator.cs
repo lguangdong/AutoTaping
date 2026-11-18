@@ -2,6 +2,7 @@
 // 层：Core/Abstractions
 // 依赖：DeviceState、OperationMode（Core/StateMachine）
 
+using AutoTaping.Core.Models;
 using AutoTaping.Core.StateMachine;
 
 namespace AutoTaping.Core.Abstractions;
@@ -32,6 +33,18 @@ public interface IAutoFlowCoordinator : IDisposable
 
     /// <summary>急停是否已被释放（急停释放后复位才会执行 ResetAxis）。</summary>
     bool IsEmergencyStopReleased { get; }
+
+    /// <summary>
+    /// 最近一次拍照识别结果（含 ΔX/ΔY/Δθ、MARK 分数与失败原因）；本次运行尚未拍过照为 <see langword="null"/>。
+    /// 由流程线程整体替换不可变对象，界面直接读引用即可。
+    /// </summary>
+    VisionCorrection? LastVision { get; }
+
+    /// <summary>
+    /// 最近一帧视觉原始图（Mono8 副本 + 尺寸 + 版本号）；尚未拍过照为 <see langword="null"/>。
+    /// 版本号变化时才需要重新转换显示，避免每帧重复转 130 万像素。
+    /// </summary>
+    VisionFrameSnapshot? LastFrame { get; }
 
     /// <summary>状态迁移成功时触发（订阅方在调用线程收到通知，不得做耗时操作）。</summary>
     event EventHandler? StateChanged;

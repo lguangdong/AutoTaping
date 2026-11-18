@@ -576,8 +576,11 @@ public partial class App : Application
         services.AddSingleton(ReadManualOptions(configuration));
         services.AddSingleton(ReadIoPointMap(configuration));
 
-        // 主画面示意图/曲线的量程（X/Z 轴软限位），同样来自 appsettings
+        // 主画面四轴位置卡的行程量程（4 轴软限位），同样来自 appsettings
         services.AddSingleton(ReadDiagramOptions(configuration));
+
+        // 生产指标（班次目标产量 / 标准节拍）：生产计划参数，来自 appsettings 的 Production 段
+        services.AddSingleton(ReadProductionOptions(configuration));
 
         // 视觉页参数（标定步长/预览间隔/软限位）与视觉算法服务（无状态，单例）
         services.AddSingleton(ReadVisionOptions(configuration));
@@ -678,16 +681,36 @@ public partial class App : Application
         };
     }
 
-    /// <summary>读取主画面示意图 / 曲线的量程：直接复用轴软限位读取结果（X/Z 两轴）。</summary>
+    /// <summary>读取生产指标配置（班次目标产量 / 标准节拍）；缺失或非法时用保守默认值。</summary>
+    private static ProductionOptions ReadProductionOptions(IConfiguration configuration)
+    {
+        var target = 500;
+        if (int.TryParse(configuration["Production:ShiftTargetCount"], out var parsedTarget))
+        {
+            target = parsedTarget;
+        }
+
+        var standardCycle = 0;
+        if (int.TryParse(configuration["Production:StandardCycleMs"], out var parsedCycle))
+        {
+            standardCycle = parsedCycle;
+        }
+
+        return new ProductionOptions
+        {
+            ShiftTargetCount = target,
+            StandardCycleMs = standardCycle,
+        };
+    }
+
+    /// <summary>读取主画面的量程：直接复用 4 轴软限位读取结果（四轴位置卡的行程条）。</summary>
     private static DiagramOptions ReadDiagramOptions(IConfiguration configuration)
     {
         var (min, max) = ReadAxisSoftLimits(configuration);
         return new DiagramOptions
         {
-            XMinLimit = min[(int)AxisId.X],
-            XMaxLimit = max[(int)AxisId.X],
-            ZMinLimit = min[(int)AxisId.Z],
-            ZMaxLimit = max[(int)AxisId.Z],
+            MinLimits = min,
+            MaxLimits = max,
         };
     }
 

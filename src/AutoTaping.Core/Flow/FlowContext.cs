@@ -30,4 +30,53 @@ public sealed class FlowContext
 
     /// <summary>单件节拍计时：从 WaitMaterial 检测到有料到 RecordOutput 完成（05 第 7.1 节）。</summary>
     public Stopwatch StepWatch { get; } = new();
+
+    /// <summary>最近一帧图像宽度（像素）；尚未拍照为 0。</summary>
+    public int LastFrameWidth { get; private set; }
+
+    /// <summary>最近一帧图像高度（像素）；尚未拍照为 0。</summary>
+    public int LastFrameHeight { get; private set; }
+
+    /// <summary>帧版本号，每次 <see cref="UpdateLastFrame"/> 自增。</summary>
+    public int FrameVersion { get; private set; }
+
+    /// <summary>图像复用缓冲：1280×1024 Mono8 约 1.3 MB，每拍新建会给 GC 造成明显压力。</summary>
+    private byte[] _frameBuffer = Array.Empty<byte>();
+
+    /// <summary>把本次拍照的像素拷进复用缓冲（不持有调用方数组的引用）。</summary>
+    /// <param name="mono8">Mono8 原始像素。</param>
+    /// <param name="width">图像宽度。</param>
+    /// <param name="height">图像高度。</param>
+    public void UpdateLastFrame(byte[] mono8, int width, int height)
+    {
+        var length = width * height;
+        if (length <= 0 || mono8.Length < length)
+        {
+            return;
+        }
+
+        if (_frameBuffer.Length < length)
+        {
+            _frameBuffer = new byte[length];
+        }
+
+        Buffer.BlockCopy(mono8, 0, _frameBuffer, 0, length);
+        LastFrameWidth = width;
+        LastFrameHeight = height;
+        FrameVersion++;
+    }
+
+    /// <summary>复制最近一帧用于跨线程发布；尚未拍照时返回 <see langword="null"/>。</summary>
+    public byte[]? CopyLastFrame()
+    {
+        if (FrameVersion == 0 || LastFrameWidth <= 0 || LastFrameHeight <= 0)
+        {
+            return null;
+        }
+
+        var length = LastFrameWidth * LastFrameHeight;
+        var copy = new byte[length];
+        Buffer.BlockCopy(_frameBuffer, 0, copy, 0, length);
+        return copy;
+    }
 }

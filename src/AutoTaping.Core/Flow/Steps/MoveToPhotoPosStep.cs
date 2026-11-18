@@ -21,7 +21,7 @@ public sealed class MoveToPhotoPosStep : FlowStep
     public override string Name => "MoveToPhotoPos";
 
     /// <inheritdoc />
-    public override int TimeoutMs => 5_000;
+    public override int TimeoutMs => 10_000;
 
     /// <inheritdoc />
     public override async Task ExecuteAsync(FlowContext ctx, CancellationToken ct)

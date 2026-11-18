@@ -3,6 +3,7 @@
 // 依赖：FlowStep、FlowContext、FlowException（Core/Exceptions）、ILogger
 
 using AutoTaping.Core.Exceptions;
+using AutoTaping.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace AutoTaping.Core.Flow;
@@ -166,6 +167,8 @@ public sealed class AutoFlowEngine
     /// <summary>带重试与超时执行单步（05 第 4.3 节）。</summary>
     private async Task ExecuteWithRetryAsync(FlowStep step, FlowContext ctx, CancellationToken stepCt)
     {
+        FlowException? lastError = null;
+
         for (var attempt = 0; attempt <= step.RetryCount; attempt++)
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(stepCt);
@@ -183,11 +186,28 @@ public sealed class AutoFlowEngine
             }
             catch (FlowException ex)
             {
+                lastError = ex;
                 _log.LogWarning(ex, "步骤 {Step} 失败（第 {N} 次）", step.Name, attempt + 1);
             }
         }
 
-        throw new FlowException($"步骤 [{step.Name}] 执行失败");
+        // 重试耗尽：必须透传最后一次的报警码与原因。
+        // 否则界面只剩「步骤 [x] 执行失败」——操作工无法自助排查，且报警码丢失会让 AL202/AL203
+        // 这类故障只切状态、不进报警列表。
+        if (lastError is not null)
+        {
+            throw new FlowException(
+                string.IsNullOrEmpty(lastError.StepName) ? step.Name : lastError.StepName,
+                lastError.Message,
+                lastError.AlarmCode,
+                lastError.AlarmLevel,
+                lastError.AlarmSource,
+                lastError.PauseInsteadOfAlarm,
+                lastError);
+        }
+
+        throw new FlowException(step.Name, $"步骤 [{step.Name}] 超时（{step.TimeoutMs} ms）",
+                                null, AlarmLevel.Critical, null, false, null);
     }
 
     /// <summary>推进到下一步：走完最后一步后回到第 2 步（WaitMaterial），即 05 第 4.2 节「回到步骤 2」。</summary>

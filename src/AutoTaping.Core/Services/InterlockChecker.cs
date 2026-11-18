@@ -15,11 +15,18 @@ namespace AutoTaping.Core.Services;
 public sealed class InterlockChecker
 {
     /// <summary>互锁 1：4 轴已回零。</summary>
-    public string? CheckAxesHomed(DeviceSnapshot snap)
+    /// <param name="snap">设备快照。</param>
+    /// <param name="isHomed">
+    /// 回零状态的权威查询（一般是 <c>IMotionCard.IsHomeCompleted</c>）。快照按 200ms 采样，
+    /// 回零刚完成那一刻可能还是旧值；「启动」这类不可重试的操作必须读硬件真值。
+    /// 传 <see langword="null"/> 时退化为读快照。
+    /// </param>
+    public string? CheckAxesHomed(DeviceSnapshot snap, Func<AxisId, bool>? isHomed = null)
     {
         foreach (var axis in AllAxes)
         {
-            if (!snap.IsHomed(axis))
+            var homed = isHomed?.Invoke(axis) ?? snap.IsHomed(axis);
+            if (!homed)
             {
                 return "4 轴未全部回零";
             }
@@ -83,11 +90,13 @@ public sealed class InterlockChecker
     /// <param name="snap">设备快照。</param>
     /// <param name="recipe">当前激活配方；<see langword="null"/> 表示未选择。</param>
     /// <param name="hasUnackedCritical">是否存在未确认严重报警。</param>
-    public IReadOnlyList<string> CheckForStart(DeviceSnapshot snap, Recipe? recipe, bool hasUnackedCritical)
+    /// <param name="isHomed">回零状态权威查询；<see langword="null"/> 时读快照。</param>
+    public IReadOnlyList<string> CheckForStart(DeviceSnapshot snap, Recipe? recipe, bool hasUnackedCritical,
+                                               Func<AxisId, bool>? isHomed = null)
     {
         var errors = new List<string>();
 
-        AddIfNotNull(errors, CheckAxesHomed(snap));
+        AddIfNotNull(errors, CheckAxesHomed(snap, isHomed));
         AddIfNotNull(errors, CheckSafetyDoorClosed(snap));
         AddIfNotNull(errors, CheckAirPressure(snap));
         AddIfNotNull(errors, CheckCameraReady(snap));

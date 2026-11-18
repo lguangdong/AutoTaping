@@ -1,4 +1,4 @@
-// 职责：自动运行页（主画面）ViewModel——200ms 轮询展示工位状态与流转箭头、实时曲线、2.5D 侧视示意图、
+// 职责：自动运行页（主画面）ViewModel——200ms 轮询展示工位状态与流转箭头、四轴实时位置、实时曲线、
 //       连续运行时长、节拍产量与通讯状态（08-页面清单 页面 1，本页只读）
 // 层：App/ViewModels
 // 依赖：IDeviceMonitor / IAutoFlowCoordinator / IRecipeRepository / IOutputRepository / IClock / IUiDispatcher /
@@ -8,6 +8,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using AutoTaping.App.Infrastructure;
 using AutoTaping.App.Navigation;
 using AutoTaping.Core.Abstractions;
@@ -28,57 +29,51 @@ public sealed partial class AutoViewModel : PageViewModel
     /// <summary>界面刷新周期（ms），与采集线程一致。</summary>
     private const int RefreshIntervalMs = 200;
 
-    /// <summary>实时曲线保留的点数（08-页面清单 页面 1：最近 300 点，200ms/点约 1 分钟）。</summary>
-    private const int HistoryLength = 300;
+    /// <summary>生产统计刷新周期（ms）。统计走数据库查询，不需要跟 200ms 的采集同频。</summary>
+    private const int StatsRefreshMs = 2_000;
 
-    /// <summary>曲线画布设计宽度（px）。XAML 里用 Viewbox 缩放，映射计算与实际像素无关。</summary>
-    private const double CurveWidth = 300;
+    /// <summary>缩略图显示尺寸（与 AutoPage 里的 Border 一致，5:4）。</summary>
+    private const double ThumbWidth = 240;
 
-    /// <summary>曲线画布设计高度（px）。</summary>
-    private const double CurveHeight = 100;
+    /// <summary>缩略图显示高度。</summary>
+    private const double ThumbHeight = 192;
 
-    /// <summary>贴胶头示意图宽度（px），与 AutoPage 里 Canvas 的贴胶头一致。</summary>
-    private const double HeadWidth = 48;
+    /// <summary>MARK 标注圆点半径（px），用于把中心点换算成左上角。</summary>
+    private const double MarkRadius = 5;
 
-    /// <summary>贴胶头在示意图里可移动的左右边界（px，两端各留 24 的余量）。</summary>
-    private const double HeadLeftMin = 24;
+    /// <summary>分数趋势保留的拍数。</summary>
+    private const int ScoreTrendLength = 30;
 
-    /// <summary>贴胶头左边界上限（px）= 画布宽 800 - 右侧余量 24 - 贴胶头宽度。</summary>
-    private const double HeadLeftMax = 800 - 24 - HeadWidth;
+    /// <summary>分数趋势画布高度（px），与 XAML 中 Polyline 容器一致。</summary>
+    private const double ScoreTrendHeight = 48;
 
-    /// <summary>Z 轴最小时贴胶头的顶部坐标（贴近台面，px）。</summary>
-    private const double HeadTopAtZMin = 120;
-
-    /// <summary>Z 轴最大时贴胶头的顶部坐标（最高位，px）。</summary>
-    private const double HeadTopAtZMax = 36;
-
-    /// <summary>流程第 5 步是拍照识别（见 AutoFlowCoordinator.BuildSteps），用于记录最后拍照时间。</summary>
-    private const int CaptureStepIndex = 5;
+    /// <summary>流程第 6 步是拍照识别（见 AutoFlowCoordinator.BuildSteps），用于记录最后拍照时间。</summary>
+    private const int CaptureStepIndex = 6;
 
     private readonly IDeviceMonitor _monitor;
     private readonly IAutoFlowCoordinator _coordinator;
     private readonly IRecipeRepository _recipes;
-    private readonly IOutputRepository _outputs;
+    private readonly IOutputService _outputService;
+    private readonly ProductionOptions _production;
     private readonly IClock _clock;
     private readonly IUiDispatcher _ui;
     private readonly IUserNotifier _notifier;
-    private readonly DiagramOptions _diagram;
     private readonly ILogger<AutoViewModel> _log;
     private readonly CancellationTokenSource _lifetime = new();
 
-    /// <summary>X 轴位置环形缓冲（mm）。</summary>
-    private readonly double[] _xHistory = new double[HistoryLength];
+    /// <summary>每拍的 MARK 较低分环形缓冲（用于趋势）。</summary>
+    private readonly double[] _scoreHistory = new double[ScoreTrendLength];
 
-    /// <summary>Z 轴位置环形缓冲（mm）。抽真空压力无模拟量通道（点表只有 X03 开关量），故第二条曲线取 Z 轴。</summary>
-    private readonly double[] _zHistory = new double[HistoryLength];
+    /// <summary>分数趋势环形缓冲写入位置。</summary>
+    private int _scoreHead;
+
+    /// <summary>分数趋势已累计点数。</summary>
+    private int _scoreCount;
 
     private CancellationTokenSource? _refreshCts;
 
-    /// <summary>环形缓冲下一次写入位置。</summary>
-    private int _historyHead;
-
-    /// <summary>环形缓冲已累计的有效点数（≤ <see cref="HistoryLength"/>）。</summary>
-    private int _historyCount;
+    /// <summary>上次刷新生产统计的时刻（<see cref="Environment.TickCount64"/>）。</summary>
+    private long _lastStatsTick;
 
     /// <summary>本次连续运行的起点；非运行状态为 <see langword="null"/>。</summary>
     private DateTime? _runStartedAt;
@@ -94,22 +89,31 @@ public sealed partial class AutoViewModel : PageViewModel
         IDeviceMonitor monitor,
         IAutoFlowCoordinator coordinator,
         IRecipeRepository recipes,
-        IOutputRepository outputs,
+        IOutputService outputService,
         IClock clock,
         IUiDispatcher ui,
         IUserNotifier notifier,
         DiagramOptions diagram,
+        ProductionOptions production,
         ILogger<AutoViewModel> log)
     {
         _monitor = monitor;
         _coordinator = coordinator;
         _recipes = recipes;
-        _outputs = outputs;
+        _outputService = outputService;
+        _production = production;
         _clock = clock;
         _ui = ui;
         _notifier = notifier;
-        _diagram = diagram;
         _log = log;
+
+        Axes = new[]
+        {
+            new AxisReadout(AxisId.X, diagram.MinLimits[(int)AxisId.X], diagram.MaxLimits[(int)AxisId.X]),
+            new AxisReadout(AxisId.Y, diagram.MinLimits[(int)AxisId.Y], diagram.MaxLimits[(int)AxisId.Y]),
+            new AxisReadout(AxisId.Z, diagram.MinLimits[(int)AxisId.Z], diagram.MaxLimits[(int)AxisId.Z]),
+            new AxisReadout(AxisId.R, diagram.MinLimits[(int)AxisId.R], diagram.MaxLimits[(int)AxisId.R]),
+        };
     }
 
     /// <inheritdoc />
@@ -123,6 +127,9 @@ public sealed partial class AutoViewModel : PageViewModel
 
     /// <inheritdoc />
     public override Permission RequiredPermission => Permission.None;
+
+    /// <summary>四轴实时读数（顺序 X/Y/Z/R），每 200ms 刷新数值与行程占比。</summary>
+    public IReadOnlyList<AxisReadout> Axes { get; }
 
     /// <summary>当前设备状态（驱动横幅与工位状态）。</summary>
     [ObservableProperty]
@@ -152,14 +159,6 @@ public sealed partial class AutoViewModel : PageViewModel
     [ObservableProperty]
     private bool _unloadActive;
 
-    /// <summary>Z 轴位置文字。</summary>
-    [ObservableProperty]
-    private string _zText = "--";
-
-    /// <summary>R 轴角度文字。</summary>
-    [ObservableProperty]
-    private string _rText = "--";
-
     /// <summary>真空状态文字（吸住 / 未吸住）。</summary>
     [ObservableProperty]
     private string _vacuumText = "--";
@@ -187,6 +186,42 @@ public sealed partial class AutoViewModel : PageViewModel
     /// <summary>良率文字。</summary>
     [ObservableProperty]
     private string _yieldText = "--";
+
+    /// <summary>当前班次名（DAY / SWING / NIGHT）。</summary>
+    [ObservableProperty]
+    private string _shiftNameText = "--";
+
+    /// <summary>本班产量 / 目标文字。</summary>
+    [ObservableProperty]
+    private string _shiftOutputText = "--";
+
+    /// <summary>班次目标达成率（0~100，驱动进度条）。</summary>
+    [ObservableProperty]
+    private double _shiftProgress;
+
+    /// <summary>达成率文字。</summary>
+    [ObservableProperty]
+    private string _shiftProgressText = "--";
+
+    /// <summary>标准节拍提示文字（未配置时为空）。</summary>
+    [ObservableProperty]
+    private string _standardCycleText = "";
+
+    /// <summary>实际 UPH（件/小时，含停机）。</summary>
+    [ObservableProperty]
+    private string _uphText = "--";
+
+    /// <summary>可用率文字（运行时长 ÷ 总时长）。</summary>
+    [ObservableProperty]
+    private string _availabilityText = "可用率 --";
+
+    /// <summary>当班停机时长文字。</summary>
+    [ObservableProperty]
+    private string _downtimeText = "--";
+
+    /// <summary>当班停机占比最高的原因。</summary>
+    [ObservableProperty]
+    private string _downtimeTopText = "--";
 
     /// <summary>是否显示「未回零」横幅。</summary>
     [ObservableProperty]
@@ -244,22 +279,6 @@ public sealed partial class AutoViewModel : PageViewModel
 
     // ==================== 实时曲线（X 轴位置 / Z 轴位置） ====================
 
-    /// <summary>X 轴位置曲线（最近 300 点，映射到 300×100 设计画布）。</summary>
-    [ObservableProperty]
-    private PointCollection _xCurvePoints = new();
-
-    /// <summary>Z 轴位置曲线（最近 300 点，映射到 300×100 设计画布）。</summary>
-    [ObservableProperty]
-    private PointCollection _zCurvePoints = new();
-
-    /// <summary>X 轴当前值（曲线标题右侧）。</summary>
-    [ObservableProperty]
-    private string _xCurveValueText = "-- mm";
-
-    /// <summary>Z 轴当前值（曲线标题右侧）。</summary>
-    [ObservableProperty]
-    private string _zCurveValueText = "-- mm";
-
     // ==================== 连续运行与拍照时间 ====================
 
     /// <summary>本次连续运行时长（HH:mm:ss，暂停/停止后清零）。</summary>
@@ -270,19 +289,66 @@ public sealed partial class AutoViewModel : PageViewModel
     [ObservableProperty]
     private string _lastCaptureText = "--";
 
-    // ==================== 2.5D 侧视示意图（贴胶头位置，画布坐标 px） ====================
+    // ==================== 视觉结果（最近一次拍照识别） ====================
 
-    /// <summary>贴胶头在示意图画布上的 Left（由 X 轴位置映射）。</summary>
+    /// <summary>最近一次 ΔX 纠偏量。</summary>
     [ObservableProperty]
-    private double _headCanvasLeft;
+    private string _visionDeltaXText = "--";
 
-    /// <summary>贴胶头在示意图画布上的 Top（由 Z 轴位置映射，Z 越大越靠上）。</summary>
+    /// <summary>最近一次 ΔY 纠偏量。</summary>
     [ObservableProperty]
-    private double _headCanvasTop = HeadTopAtZMin;
+    private string _visionDeltaYText = "--";
 
-    /// <summary>示意图右上角的 X/Y/Z 位置文字。</summary>
+    /// <summary>最近一次 Δθ 纠偏量。</summary>
     [ObservableProperty]
-    private string _headPositionText = "--";
+    private string _visionDeltaThetaText = "--";
+
+    /// <summary>最近一次两个 MARK 的匹配分数。</summary>
+    [ObservableProperty]
+    private string _visionScoreText = "--";
+
+    /// <summary>最近一次视觉结果说明（识别正常 / 失败原因）。</summary>
+    [ObservableProperty]
+    private string _visionResultText = "尚未拍照";
+
+    /// <summary>最近一次视觉是否成功（驱动结果文字颜色）。</summary>
+    [ObservableProperty]
+    private bool _visionOk;
+
+    /// <summary>最近一帧视觉缩略图（Gray8 → BitmapSource，仅在帧版本变化时重建）。</summary>
+    [ObservableProperty]
+    private ImageSource? _visionImage;
+
+    /// <summary>识别耗时文字（如 <c>42 ms</c>）。</summary>
+    [ObservableProperty]
+    private string _visionTimeText = "--";
+
+    /// <summary>是否在缩略图上显示两个 MARK 的标注。</summary>
+    [ObservableProperty]
+    private bool _showMarks;
+
+    /// <summary>MARK1 标注在缩略图上的左上角 X。</summary>
+    [ObservableProperty]
+    private double _mark1CanvasLeft;
+
+    /// <summary>MARK1 标注在缩略图上的左上角 Y。</summary>
+    [ObservableProperty]
+    private double _mark1CanvasTop;
+
+    /// <summary>MARK2 标注在缩略图上的左上角 X。</summary>
+    [ObservableProperty]
+    private double _mark2CanvasLeft;
+
+    /// <summary>MARK2 标注在缩略图上的左上角 Y。</summary>
+    [ObservableProperty]
+    private double _mark2CanvasTop;
+
+    /// <summary>MARK 分数趋势折线（最近若干拍的较低分）。</summary>
+    [ObservableProperty]
+    private PointCollection _scoreTrendPoints = new();
+
+    /// <summary>已转换过的帧版本号。</summary>
+    private int _convertedFrameVersion = -1;
 
     /// <inheritdoc />
     public override Task<bool> OnEnteringAsync(CancellationToken ct)
@@ -364,19 +430,14 @@ public sealed partial class AutoViewModel : PageViewModel
 
         LoadActive = IsInRange(stepIndex, 2, 2);
         PhotoActive = IsInRange(stepIndex, 3, 5);
-        TapeActive = IsInRange(stepIndex, 6, 13);
-        UnloadActive = IsInRange(stepIndex, 14, 15);
+        TapeActive = IsInRange(stepIndex, 6, 10);
+        UnloadActive = IsInRange(stepIndex, 11, 12);
 
         // 箭头按「正在流转的那一段」高亮：上料→拍照、拍照→贴附、贴附→下料
         Arrow1Active = IsInRange(stepIndex, 2, 3);
-        Arrow2Active = IsInRange(stepIndex, 6, 7);
-        Arrow3Active = IsInRange(stepIndex, 13, 14);
+        Arrow2Active = IsInRange(stepIndex, 5, 6);
+        Arrow3Active = IsInRange(stepIndex, 10, 11);
 
-        var x = snap.GetPosition(AxisId.X);
-        var z = snap.GetPosition(AxisId.Z);
-
-        ZText = $"{z:F2} mm";
-        RText = $"{snap.GetPosition(AxisId.R):F2}°";
         VacuumOn = snap.Di(IoPointNames.VacuumSensor);
         VacuumText = VacuumOn ? "吸住" : "未吸住";
         PressureText = snap.Di(IoPointNames.AirPressureOk) ? "正常" : "不足";
@@ -398,15 +459,106 @@ public sealed partial class AutoViewModel : PageViewModel
         var now = _clock.Now;
         UpdateRunTime(state, now);
         UpdateLastCapture(state, stepIndex, now);
-        UpdateCurves(x, z);
-        UpdateDiagram(x, z, snap);
+        UpdateAxes(snap);
+        UpdateVision(_coordinator.LastVision);
+        UpdateVisionFrame();
 
         _lastSnapshot = snap;
 
-        var statistics = _outputs.GetStatistics(now.Date, now);
-        CycleTimeText = statistics.AverageCycleTimeMs <= 0 ? "--" : $"{statistics.AverageCycleTimeMs / 1000.0:F2} s";
-        OutputText = $"{statistics.TotalCount} 件";
-        YieldText = statistics.TotalCount == 0 ? "--" : $"{statistics.Yield * 100:F1}%";
+        // 生产统计走数据库，不需要 200ms 刷新一次；2 秒足以，且能把查询次数降一个数量级
+        if (Environment.TickCount64 - _lastStatsTick >= StatsRefreshMs)
+        {
+            _lastStatsTick = Environment.TickCount64;
+            UpdateStatistics(now);
+        }
+    }
+
+    /// <summary>刷新当班统计（产量/目标、节拍、实际 UPH、停机与可用率）。</summary>
+    /// <param name="now">当前时刻（决定日期与班次）。</param>
+    private void UpdateStatistics(DateTime now)
+    {
+        var summary = _outputService.GetDaySummary(now.Date);
+
+        OutputText = $"{summary.TotalCount} 件";
+        CycleTimeText = summary.AverageCycleTimeMs <= 0
+            ? "--"
+            : $"{summary.AverageCycleTimeMs / 1000.0:F2} s";
+        YieldText = summary.TotalCount == 0 ? "--" : $"{summary.Yield * 100:F1}%";
+
+        // 本班产量 / 目标达成
+        var shiftName = _outputService.GetShiftName(now);
+        ShiftNameText = shiftName;
+
+        var shiftCount = 0;
+        foreach (var shift in summary.Shifts)
+        {
+            if (string.Equals(shift.ShiftName, shiftName, StringComparison.Ordinal))
+            {
+                shiftCount = shift.TotalCount;
+                break;
+            }
+        }
+
+        var target = _production.ShiftTargetCount;
+        if (target > 0)
+        {
+            var progress = Math.Clamp(shiftCount * 100.0 / target, 0, 100);
+            ShiftOutputText = $"{shiftCount} / {target} 件";
+            ShiftProgress = progress;
+            ShiftProgressText = $"{progress:F1}%";
+        }
+        else
+        {
+            ShiftOutputText = $"{shiftCount} 件";
+            ShiftProgress = 0;
+            ShiftProgressText = "未设目标";
+        }
+
+        // 标准节拍对比（未配置基准时只显示实际值）
+        StandardCycleText = _production.StandardCycleMs > 0
+            ? $"标准 {_production.StandardCycleMs / 1000.0:F2} s"
+            : "";
+
+        // 实际 UPH = 产量 ÷ 总时长（含停机）；可用率 = 运行 ÷ 总时长
+        var totalSeconds = summary.RunSeconds + summary.DowntimeSeconds;
+        if (totalSeconds <= 0)
+        {
+            UphText = "--";
+            AvailabilityText = "可用率 --";
+        }
+        else
+        {
+            UphText = $"{summary.TotalCount * 3600.0 / totalSeconds:F0}";
+            AvailabilityText = $"可用率 {summary.RunSeconds * 100.0 / totalSeconds:F0}%";
+        }
+
+        // 停机：当班总时长 + 占时最长的原因
+        DowntimeText = FormatMinutes(summary.DowntimeSeconds);
+
+        DowntimeSummary? top = null;
+        foreach (var item in _outputService.GetDowntimeSummary(now.Date, now))
+        {
+            if (top is null || item.TotalSeconds > top.TotalSeconds)
+            {
+                top = item;
+            }
+        }
+
+        DowntimeTopText = top is null || top.TotalSeconds == 0
+            ? "本班无停机"
+            : $"TOP1 {top.DisplayName} {FormatMinutes(top.TotalSeconds)}";
+    }
+
+    /// <summary>把秒数格式化成「x 分」或「x 时 x 分」。</summary>
+    private static string FormatMinutes(int seconds)
+    {
+        if (seconds <= 0)
+        {
+            return "0 min";
+        }
+
+        var minutes = seconds / 60;
+        return minutes < 60 ? $"{minutes} min" : $"{minutes / 60} h {minutes % 60} min";
     }
 
     /// <summary>连续运行时长：进入 Running 开始计时，暂停 / 停止 / 故障即结束本次计时。</summary>
@@ -423,7 +575,7 @@ public sealed partial class AutoViewModel : PageViewModel
         RunTimeText = FormatDuration(now - _runStartedAt.Value);
     }
 
-    /// <summary>最后拍照时间：拍照是流程第 5 步（瞬时步骤），进入该步骤即记录时刻。</summary>
+    /// <summary>最后拍照时间：拍照是流程第 6 步（瞬时步骤），进入该步骤即记录时刻。</summary>
     private void UpdateLastCapture(DeviceState state, int stepIndex, DateTime now)
     {
         if (state == DeviceState.Running && stepIndex == CaptureStepIndex)
@@ -434,52 +586,123 @@ public sealed partial class AutoViewModel : PageViewModel
         LastCaptureText = _lastCaptureAt?.ToString("HH:mm:ss", CultureInfo.InvariantCulture) ?? "--";
     }
 
-    /// <summary>把当前 X / Z 位置压入环形缓冲并重算两条折线。</summary>
-    private void UpdateCurves(double x, double z)
-    {
-        _xHistory[_historyHead] = x;
-        _zHistory[_historyHead] = z;
-        _historyHead = (_historyHead + 1) % HistoryLength;
-        if (_historyCount < HistoryLength)
-        {
-            _historyCount++;
-        }
 
-        XCurvePoints = BuildCurve(_xHistory, _diagram.XMinLimit, _diagram.XMaxLimit);
-        ZCurvePoints = BuildCurve(_zHistory, _diagram.ZMinLimit, _diagram.ZMaxLimit);
-        XCurveValueText = $"{x:F1} mm";
-        ZCurveValueText = $"{z:F1} mm";
+
+    /// <summary>刷新四轴读数（位置数值、到位状态、行程占比）。</summary>
+    private void UpdateAxes(DeviceSnapshot snapshot)
+    {
+        foreach (var axis in Axes)
+        {
+            axis.Apply(snapshot);
+        }
     }
 
-    /// <summary>按软限位把环形缓冲映射成折线点（横轴固定 300 点，未填满时从左侧开始画）。</summary>
-    private PointCollection BuildCurve(double[] buffer, double min, double max)
+    /// <summary>刷新视觉结果（纠偏量、MARK 分数、失败说明）。</summary>
+    /// <param name="vision">协调器给出的最近一次视觉结果；未拍照过为 <see langword="null"/>。</param>
+    private void UpdateVision(VisionCorrection? vision)
     {
-        var points = new PointCollection(_historyCount);
-        var span = max - min;
-        if (span <= 0)
+        if (vision is null)
         {
-            span = 1;
+            VisionDeltaXText = "--";
+            VisionDeltaYText = "--";
+            VisionDeltaThetaText = "--";
+            VisionScoreText = "--";
+            VisionTimeText = "--";
+            VisionResultText = "尚未拍照";
+            VisionOk = false;
+            return;
         }
 
-        var start = (_historyHead - _historyCount + HistoryLength) % HistoryLength;
-        for (var i = 0; i < _historyCount; i++)
+        VisionDeltaXText = vision.DeltaX.ToString("+0.00;-0.00;0.00", CultureInfo.InvariantCulture) + " mm";
+        VisionDeltaYText = vision.DeltaY.ToString("+0.00;-0.00;0.00", CultureInfo.InvariantCulture) + " mm";
+        VisionDeltaThetaText = vision.DeltaTheta.ToString("+0.00;-0.00;0.00", CultureInfo.InvariantCulture) + " °";
+        VisionScoreText = $"MARK1 {vision.Score1:F2}  MARK2 {vision.Score2:F2}";
+        VisionTimeText = vision.ElapsedMs > 0 ? $"{vision.ElapsedMs} ms" : "--";
+        VisionOk = vision.Success;
+        VisionResultText = vision.Success
+            ? "识别正常"
+            : "识别失败：" + (vision.ErrorDetail ?? vision.Error.ToString());
+    }
+
+    /// <summary>
+    /// 把最新一帧转成可显示的位图。版本号未变则直接返回——
+    /// 1280×1024 有 130 万像素，每 200ms 转换一次会明显占用 UI 线程。
+    /// </summary>
+    private void UpdateVisionFrame()
+    {
+        var frame = _coordinator.LastFrame;
+        if (frame is null || frame.Version == _convertedFrameVersion)
         {
-            var value = buffer[(start + i) % HistoryLength];
-            var normalized = Math.Clamp((value - min) / span, 0, 1);
-            var px = i * CurveWidth / (HistoryLength - 1);
-            var py = CurveHeight - (normalized * CurveHeight);
+            return;
+        }
+
+        _convertedFrameVersion = frame.Version;
+
+        try
+        {
+            var bitmap = BitmapSource.Create(
+                frame.Width, frame.Height, 96, 96,
+                PixelFormats.Gray8, null, frame.Mono8, frame.Width);
+            bitmap.Freeze();
+            VisionImage = bitmap;
+        }
+        catch (ArgumentException ex)
+        {
+            _log.LogWarning(ex, "视觉帧转换为位图失败（{Width}×{Height}）", frame.Width, frame.Height);
+            return;
+        }
+
+        var vision = _coordinator.LastVision;
+        UpdateMarkOverlay(frame, vision);
+
+        if (vision is not null)
+        {
+            PushScore(Math.Min(vision.Score1, vision.Score2));
+        }
+    }
+
+    /// <summary>把图像像素坐标换算成缩略图坐标（Stretch=Uniform：按短边等比缩放后居中）。</summary>
+    private void UpdateMarkOverlay(VisionFrameSnapshot frame, VisionCorrection? vision)
+    {
+        if (vision is null || vision.Mark1X <= 0 || vision.Mark2X <= 0
+            || frame.Width <= 0 || frame.Height <= 0)
+        {
+            ShowMarks = false;
+            return;
+        }
+
+        var scale = Math.Min(ThumbWidth / frame.Width, ThumbHeight / frame.Height);
+        var offsetX = (ThumbWidth - (frame.Width * scale)) / 2;
+        var offsetY = (ThumbHeight - (frame.Height * scale)) / 2;
+
+        Mark1CanvasLeft = offsetX + (vision.Mark1X * scale) - MarkRadius;
+        Mark1CanvasTop = offsetY + (vision.Mark1Y * scale) - MarkRadius;
+        Mark2CanvasLeft = offsetX + (vision.Mark2X * scale) - MarkRadius;
+        Mark2CanvasTop = offsetY + (vision.Mark2Y * scale) - MarkRadius;
+        ShowMarks = true;
+    }
+
+    /// <summary>把本拍分数压入环形缓冲并重算趋势折线（分数缓慢下降是镜头脏 / 光照劣化的早期信号）。</summary>
+    private void PushScore(double score)
+    {
+        _scoreHistory[_scoreHead] = score;
+        _scoreHead = (_scoreHead + 1) % ScoreTrendLength;
+        if (_scoreCount < ScoreTrendLength)
+        {
+            _scoreCount++;
+        }
+
+        var points = new PointCollection(_scoreCount);
+        var start = (_scoreHead - _scoreCount + ScoreTrendLength) % ScoreTrendLength;
+        for (var i = 0; i < _scoreCount; i++)
+        {
+            var value = Math.Clamp(_scoreHistory[(start + i) % ScoreTrendLength], 0, 1);
+            var px = i * ThumbWidth / (ScoreTrendLength - 1);
+            var py = ScoreTrendHeight - (value * ScoreTrendHeight);
             points.Add(new Point(px, py));
         }
 
-        return points;
-    }
-
-    /// <summary>2.5D 示意图：X 轴位置映射成左右位移，Z 轴位置映射成上下位移。</summary>
-    private void UpdateDiagram(double x, double z, DeviceSnapshot snap)
-    {
-        HeadCanvasLeft = MapRange(x, _diagram.XMinLimit, _diagram.XMaxLimit, HeadLeftMin, HeadLeftMax);
-        HeadCanvasTop = MapRange(z, _diagram.ZMinLimit, _diagram.ZMaxLimit, HeadTopAtZMin, HeadTopAtZMax);
-        HeadPositionText = $"X {x:F1}　Y {snap.GetPosition(AxisId.Y):F1}　Z {z:F1} mm";
+        ScoreTrendPoints = points;
     }
 
     /// <summary>点击工位查看详情（08-页面清单 页面 1 交互规则：当前位置、IO 状态、最近拍照）。</summary>
@@ -518,18 +741,6 @@ public sealed partial class AutoViewModel : PageViewModel
             : "未运行";
 
         _notifier.Info($"{title}\n{detail}\n当前：{stepText}\n设备状态：{StateText}");
-    }
-
-    /// <summary>把数值从 [fromMin, fromMax] 线性映射到 [toMin, toMax]，超范围按边界截断。</summary>
-    private static double MapRange(double value, double fromMin, double fromMax, double toMin, double toMax)
-    {
-        if (fromMax <= fromMin)
-        {
-            return toMin;
-        }
-
-        var normalized = Math.Clamp((value - fromMin) / (fromMax - fromMin), 0, 1);
-        return toMin + (normalized * (toMax - toMin));
     }
 
     /// <summary>时长格式化为 HH:mm:ss（超过 24 小时继续累加小时数）。</summary>

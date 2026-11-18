@@ -108,6 +108,41 @@
                             Command="{Binding ClearForcedCommand}" />
                 </StackPanel>
 
+                <!-- ===== 输入模拟（仅虚拟模式；真实硬件模式整行隐藏） ===== -->
+                <StackPanel Orientation="Horizontal" Margin="0,16,0,0"
+                            Visibility="{Binding IsVirtualMode, Converter={StaticResource BoolToVisibility}}"
+                            IsEnabled="{Binding CanForceOutput}">
+                    <TextBlock Text="输入模拟" Style="{StaticResource StatusLabelText}" VerticalAlignment="Center" />
+                    <ComboBox Width="200"
+                              Margin="8,0,0,0"
+                              ItemsSource="{Binding DiPoints}"
+                              SelectedItem="{Binding SelectedDiPoint}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Point}"
+                                               FontFamily="{StaticResource FontFamilyNumeric}" />
+                                    <TextBlock Text="{Binding DisplayName}" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Button Content="置 ON"
+                            Style="{StaticResource SmallButton}"
+                            Margin="16,0,0,0"
+                            Command="{Binding SimulateDiOnCommand}" />
+                    <Button Content="置 OFF"
+                            Style="{StaticResource SmallButton}"
+                            Margin="8,0,0,0"
+                            Command="{Binding SimulateDiOffCommand}" />
+                </StackPanel>
+
+                <TextBlock Text="虚拟模式：手动给出传感器信号（如 X00 置 ON 后自动流程才会越过「等待载具」）。"
+                           Style="{StaticResource HintText}"
+                           Margin="0,8,0,0"
+                           Visibility="{Binding IsVirtualMode, Converter={StaticResource BoolToVisibility}}" />
+
                 <TextBlock Text="{Binding OperationText}"
                            Style="{StaticResource HintText}"
                            Margin="0,8,0,0" />

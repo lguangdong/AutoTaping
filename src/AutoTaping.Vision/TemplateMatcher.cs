@@ -129,7 +129,6 @@ public sealed class TemplateMatcher : IDisposable
         _disposed = true;
         _template?.Dispose();
         _template = null;
-        GC.SuppressFinalize(this);
     }
 
     /// <summary>多通道 Mat 转灰度副本（模板必须单通道）。</summary>

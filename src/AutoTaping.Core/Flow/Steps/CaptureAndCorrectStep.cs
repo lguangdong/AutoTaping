@@ -46,7 +46,14 @@ public sealed class CaptureAndCorrectStep : FlowStep
                                     pauseInsteadOfAlarm: false, innerException: null);
         }
 
+        // 留存最近一帧：识别失败时这张图是排障的唯一证据
+        ctx.UpdateLastFrame(frame.Mono8Data, frame.Width, frame.Height);
+
         var correction = _vision.Correct(frame.Mono8Data, frame.Width, frame.Height);
+
+        // 成败都写回上下文：界面需要显示失败原因（流程后续步骤只在成功时使用该结果）
+        ctx.LastCorrection = correction;
+
         if (!correction.Success)
         {
             switch (correction.Error)
@@ -65,8 +72,6 @@ public sealed class CaptureAndCorrectStep : FlowStep
                                             pauseInsteadOfAlarm: false, innerException: null);
             }
         }
-
-        ctx.LastCorrection = correction;
     }
 
     /// <summary>拍照并内部重试 2 次（仅拍照超时重试，识别失败不重试）。</summary>

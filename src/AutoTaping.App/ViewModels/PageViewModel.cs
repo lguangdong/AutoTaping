@@ -57,7 +57,6 @@ public abstract class PageViewModel : ObservableObject, IDisposable
 
         _disposed = true;
         DisposeCore();
-        GC.SuppressFinalize(this);
     }
 
     /// <summary>子类释放资源（停刷新循环、取消令牌等）。</summary>

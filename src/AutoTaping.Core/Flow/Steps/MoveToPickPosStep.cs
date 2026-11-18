@@ -30,6 +30,7 @@ public sealed class MoveToPickPosStep : FlowStep
         var position = ctx.Recipe.Parameters.Position;
         var speed = ctx.Recipe.Parameters.Process.MoveSpeedMmPerSec;
 
+        //轮询判断是否到位来确定是否超时
         await MoveHelper.MoveAsync(_motion, AxisId.X, position.PickPosX, speed, TimeoutMs, Name, ct);
         await MoveHelper.MoveAsync(_motion, AxisId.Y, position.PickPosY, speed, TimeoutMs, Name, ct);
     }

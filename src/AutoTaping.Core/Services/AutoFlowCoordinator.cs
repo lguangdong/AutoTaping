@@ -60,6 +60,18 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
     private int _lastStepIndex = -1;
     private bool _disposed;
 
+    /// <summary>本次运行的流程上下文（停止后仍保留，便于界面继续显示上一件的视觉结果）。</summary>
+    private volatile FlowContext? _currentContext;
+
+    /// <summary>最近一次视觉结果（不可变对象，整体替换引用，界面可无锁读取）。</summary>
+    private volatile VisionCorrection? _lastVision;
+
+    /// <summary>最近一帧图像快照（独立副本，整体替换引用）。</summary>
+    private volatile VisionFrameSnapshot? _lastFrame;
+
+    /// <summary>已发布到界面的帧版本号，避免每步都复制一次 1.3 MB 像素。</summary>
+    private int _publishedFrameVersion;
+
     /// <summary>当前停机原因代码；<see langword="null"/> 表示未处于停机统计中。</summary>
     private string? _downtimeReason;
 
@@ -146,6 +158,12 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
     public bool IsEmergencyStopReleased => _estopReleased;
 
     /// <inheritdoc />
+    public VisionCorrection? LastVision => _lastVision;
+
+    /// <inheritdoc />
+    public VisionFrameSnapshot? LastFrame => _lastFrame;
+
+    /// <inheritdoc />
     public event EventHandler? StateChanged;
 
     /// <inheritdoc />
@@ -194,7 +212,10 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
         }
 
         var recipe = _recipes.GetActive();
-        var errors = _interlock.CheckForStart(_monitor.Current, recipe, _alarm.HasUnackedCritical());
+        // 回零状态取硬件真值：快照每 200ms 采样一次，回零刚完成时可能仍是「未回零」，
+        // 会让操作工看到「就绪」后点启动却被拒绝一次。
+        var errors = _interlock.CheckForStart(_monitor.Current, recipe, _alarm.HasUnackedCritical(),
+                                              _motion.IsHomeCompleted);
         if (errors.Count > 0)
         {
             // 05 第 6.1 节：一次列全所有失败原因
@@ -216,6 +237,9 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
             Recipe = recipe,
             SequenceNo = _outputs.NextSequenceNo(_clock.Now)
         };
+
+        // 保留上一件的视觉结果：现场最常问的是「上一件偏了多少」
+        _currentContext = ctx;
 
         _log.LogInformation("启动自动流程：配方 {Recipe}", recipe.Name);
         _flowCts = new CancellationTokenSource();
@@ -250,6 +274,7 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
         }
 
         _flowCts?.Cancel();
+        _io.WriteDo(IoPointNames.ConveyorRun, false);
         _engine.Resume();
         _stateMachine.TryTransition(DeviceState.Ready);
         EndDowntime();
@@ -288,11 +313,12 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
         // 05 第 5.2 节：顺序不得调整
         _motion.EmergencyStopAll();                  // 1. 立刻停轴
         _io.ClearAllForcedOutput();                  // 2. 清除强制输出
-        _io.WriteDo(IoPointNames.VacuumValve, false);   // 3. 关真空
-        _io.WriteDo(IoPointNames.BlowValve, false);      // 4. 关吹气
-        _io.WriteDo(IoPointNames.PressCylinder, false);  // 5. 压合气缸抬起
-        _io.WriteDo(IoPointNames.TowerLightGreen, false); // 6. 绿灯灭
-        _io.WriteDo(IoPointNames.TowerLightRed, true);    // 7. 红灯亮
+        _io.WriteDo(IoPointNames.ConveyorRun, false);   // 3. 停传送带（防止载具继续流动）
+        _io.WriteDo(IoPointNames.VacuumValve, false);   // 4. 关真空
+        _io.WriteDo(IoPointNames.BlowValve, false);      // 5. 关吹气
+        _io.WriteDo(IoPointNames.PressCylinder, false);  // 6. 压合气缸抬起
+        _io.WriteDo(IoPointNames.TowerLightGreen, false); // 7. 绿灯灭
+        _io.WriteDo(IoPointNames.TowerLightRed, true);    // 8. 红灯亮
 
         _estopReleased = false;
         _flowCts?.Cancel();
@@ -361,6 +387,9 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
         {
             _motion.Stop(axis, emergency: false);
         }
+
+        // 传送带由放行步骤开、下一拍停，暂停时必须主动关带，否则载具会被带走
+        _io.WriteDo(IoPointNames.ConveyorRun, false);
 
         BeginDowntime(reason);
         _log.LogInformation("自动流程已暂停（{Reason}）", DowntimeReasons.GetDisplayName(reason));
@@ -444,7 +473,11 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
                && !_alarm.HasUnackedCritical();
     }
 
-    /// <summary>按 05 第 4.2 节顺序构建 11 个流程步骤（产线 + 点贴：无贴附路径、无下料位移动）。</summary>
+    /// <summary>
+    /// 按 05 第 4.2 节顺序构建 12 个流程步骤（产线 + 点贴：无贴附路径、无下料位移动）。
+    /// 相机 Eye-in-Hand（随贴上头一起动），拍照前必须由 <see cref="MoveToPhotoPosStep"/> 把头送到拍照位，
+    /// 否则拍到的是头当前位置的正下方（首拍在回零位、后续在贴附位），MARK 会落到视野外。
+    /// </summary>
     private IReadOnlyList<FlowStep> BuildSteps()
     {
         return new List<FlowStep>
@@ -452,14 +485,15 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
             new CheckPreconditionsStep(_interlock, _monitor, _alarm),
             new WaitCarrierStep(_io, _recipes, _loggerFactory.CreateLogger<WaitCarrierStep>()),
             new SettleDelayStep(),
+            new MoveToPhotoPosStep(_motion),
             new CaptureAndCorrectStep(_camera, _vision),
             new MoveToPickPosStep(_motion),
             new PickTapeStep(_motion, _io),
             new MoveToTapePosStep(_motion),
             new PressAndHoldStep(_motion, _io),
             new ReleaseTapeStep(_motion, _io),
-            new ConveyOutStep(_io),
-            new RecordOutputStep(_outputs, _clock, _loggerFactory.CreateLogger<RecordOutputStep>())
+            new RecordOutputStep(_outputs, _clock, _loggerFactory.CreateLogger<RecordOutputStep>()),
+            new ConveyOutStep(_io)
         };
     }
 
@@ -493,9 +527,8 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
         {
             _log.LogInformation("流程暂停（非故障）：{Message}", ex.Message);
             _notifier.Warn(ex.Message);
-            _engine.Pause();
-            _stateMachine.TryTransition(DeviceState.Paused);
-            BeginDowntime(DowntimeReasons.WaitMaterial);
+            // 走统一暂停路径，保证停轴、关传送带、停机统计一个不漏（如载具等待超时时带子正开着）
+            PauseCore(DowntimeReasons.WaitMaterial);
             return;
         }
 
@@ -713,10 +746,49 @@ public sealed class AutoFlowCoordinator : IAutoFlowCoordinator
     /// <summary>步骤完成：单步模式下自动转 Paused（流程线程上触发，状态机线程安全）。</summary>
     private void OnStepCompleted(object? sender, EventArgs e)
     {
+        PublishVision();
+
         if (_engine.SingleStep)
         {
             _stateMachine.TryTransition(DeviceState.Paused);
         }
+    }
+
+    /// <summary>把流程上下文里的视觉结果与最新帧发布给界面；只在帧版本变化时复制像素。</summary>
+    private void PublishVision()
+    {
+        var ctx = _currentContext;
+        if (ctx is null)
+        {
+            return;
+        }
+
+        var vision = ctx.LastCorrection;
+        if (vision is not null)
+        {
+            _lastVision = vision;
+        }
+
+        if (ctx.FrameVersion == _publishedFrameVersion)
+        {
+            return;
+        }
+
+        _publishedFrameVersion = ctx.FrameVersion;
+        var bytes = ctx.CopyLastFrame();
+        if (bytes is null)
+        {
+            return;
+        }
+
+        _lastFrame = new VisionFrameSnapshot
+        {
+            Mono8 = bytes,
+            Width = ctx.LastFrameWidth,
+            Height = ctx.LastFrameHeight,
+            Version = ctx.FrameVersion,
+            Success = vision?.Success ?? false,
+        };
     }
 
     private static string GetStateText(DeviceState state) => state switch

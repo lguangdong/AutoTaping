@@ -9,6 +9,7 @@ using AutoTaping.App.Navigation;
 using AutoTaping.Core.Abstractions;
 using AutoTaping.Core.Exceptions;
 using AutoTaping.Core.Models;
+using AutoTaping.Hardware.Io;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -30,7 +31,14 @@ public sealed partial class IoViewModel : PageViewModel
     /// <summary>强制状态下拉项：写入 OFF。</summary>
     private const string ForceOffText = "OFF";
 
+    /// <summary>本地写入后等待采集快照确认的最长时间（ms）。采集周期 200ms，留足余量。</summary>
+    private const int PendingHoldMs = 2_000;
+
     private readonly IIoService _io;
+
+    /// <summary>虚拟 IO 实现；真实硬件模式为 <see langword="null"/>（不提供输入模拟）。</summary>
+    private readonly VirtualIoService? _virtualIo;
+
     private readonly IAuthService _auth;
     private readonly IDeviceMonitor _monitor;
     private readonly IUiDispatcher _ui;
@@ -39,6 +47,14 @@ public sealed partial class IoViewModel : PageViewModel
     private readonly CancellationTokenSource _lifetime = new();
 
     private CancellationTokenSource? _refreshCts;
+
+    /// <summary>本地刚写入、采集快照尚未追上的点位（防止 200ms 刷新用旧值覆盖显示）。</summary>
+    private readonly Dictionary<string, PendingState> _pendingStates = new(StringComparer.Ordinal);
+
+    private readonly object _pendingSync = new();
+
+    /// <summary>本地待确认的点位状态与过期时刻（<see cref="Environment.TickCount64"/>，单调不受系统时间影响）。</summary>
+    private readonly record struct PendingState(bool Value, long ExpireTick);
 
     /// <summary>构造 IO 页 ViewModel（页面进入时才开始刷新）。</summary>
     /// <param name="io">IO 服务抽象。</param>
@@ -57,6 +73,7 @@ public sealed partial class IoViewModel : PageViewModel
                        ILogger<IoViewModel> log)
     {
         _io = io;
+        _virtualIo = io as VirtualIoService;
         _auth = auth;
         _monitor = monitor;
         _ui = ui;
@@ -72,6 +89,9 @@ public sealed partial class IoViewModel : PageViewModel
         {
             DoPoints.Add(new IoPointViewModel(point.Point, point.Name));
         }
+
+        // 默认选中第一个输入点（X00 载具到位），虚拟模式下放行自动流程时少一步选择
+        SelectedDiPoint = DiPoints.Count > 0 ? DiPoints[0] : null;
     }
 
     /// <inheritdoc />
@@ -112,7 +132,14 @@ public sealed partial class IoViewModel : PageViewModel
     [ObservableProperty]
     private string _selectedForceState = ForceOnText;
 
-    /// <summary>操作结果提示（最近一次强制写入 / 清除的结果）。</summary>
+    /// <summary>是否虚拟硬件模式（真实模式不提供输入模拟）。</summary>
+    public bool IsVirtualMode => _virtualIo is not null;
+
+    /// <summary>输入模拟当前选中的点位（默认 X00 载具到位）。</summary>
+    [ObservableProperty]
+    private IoPointViewModel? _selectedDiPoint;
+
+    /// <summary>操作结果提示（最近一次强制写入 / 清除 / 模拟的结果）。</summary>
     [ObservableProperty]
     private string _operationText = "";
 
@@ -173,6 +200,7 @@ public sealed partial class IoViewModel : PageViewModel
             _io.ForceOutput(point.Point, on);
             point.IsForced = true;
             point.IsOn = on;
+            MarkPending(point.Point, on);
             OperationText = $"已强制 {point.Point}（{point.DisplayName}）= {(on ? ForceOnText : ForceOffText)}";
             _log.LogWarning("IO 强制输出：{Point}（{Name}）= {State}，操作人 {User}",
                             point.Point, point.DisplayName, on ? ForceOnText : ForceOffText,
@@ -189,6 +217,14 @@ public sealed partial class IoViewModel : PageViewModel
     [RelayCommand]
     private void ClearForced() => ClearForcedCore("用户点击全部清除");
 
+    /// <summary>模拟输入置 ON（仅虚拟模式 + 工程师权限）。用于虚拟模式下放行自动流程，如 X00 载具到位。</summary>
+    [RelayCommand(CanExecute = nameof(CanSimulateDi))]
+    private void SimulateDiOn() => SimulateDi(true);
+
+    /// <summary>模拟输入置 OFF（仅虚拟模式 + 工程师权限）。</summary>
+    [RelayCommand(CanExecute = nameof(CanSimulateDi))]
+    private void SimulateDiOff() => SimulateDi(false);
+
     /// <inheritdoc />
     protected override void DisposeCore()
     {
@@ -199,6 +235,38 @@ public sealed partial class IoViewModel : PageViewModel
 
     private bool CanForceWrite() => CanForceOutput && SelectedDoPoint is not null;
 
+    private bool CanSimulateDi() => IsVirtualMode && CanForceOutput && SelectedDiPoint is not null;
+
+    /// <summary>
+    /// 模拟一路输入信号。虚拟模式没有真实传感器，自动流程的「载具到位」「料盘有余料」等
+    /// 触发条件只能由此手动给出；真实模式下 <see cref="IsVirtualMode"/> 为 false，命令始终不可用。
+    /// 权限沿用 <see cref="Permission.IoForce"/>：伪造 X05/X06/X07 可绕过安全互锁，只能工程师操作。
+    /// </summary>
+    /// <param name="on">目标状态。</param>
+    private void SimulateDi(bool on)
+    {
+        var point = SelectedDiPoint;
+        if (_virtualIo is null || point is null)
+        {
+            return;
+        }
+
+        if (!_auth.HasPermission(Permission.IoForce))
+        {
+            _log.LogWarning("越权尝试模拟输入：用户 {User}", _auth.CurrentUser?.UserName);
+            _notifier.Warn("模拟输入需要工程师权限，请切换到工程师账户后再试。");
+            return;
+        }
+
+        _virtualIo.SetDi(point.Point, on);
+        point.IsOn = on;
+        MarkPending(point.Point, on);
+        OperationText = $"已模拟 {point.Point}（{point.DisplayName}）= {(on ? ForceOnText : ForceOffText)}";
+        _log.LogWarning("虚拟输入模拟：{Point}（{Name}）= {State}，操作人 {User}",
+                        point.Point, point.DisplayName, on ? ForceOnText : ForceOffText,
+                        _auth.CurrentUser?.UserName);
+    }
+
     private void ClearForcedCore(string reason)
     {
         try
@@ -208,6 +276,11 @@ public sealed partial class IoViewModel : PageViewModel
             foreach (var point in DoPoints)
             {
                 point.IsForced = false;
+            }
+
+            lock (_pendingSync)
+            {
+                _pendingStates.Clear();
             }
 
             OperationText = "已清除全部强制输出";
@@ -274,16 +347,74 @@ public sealed partial class IoViewModel : PageViewModel
     {
         foreach (var point in DiPoints)
         {
+            // 刚点过的那一路：采集线程还没采到新值，用旧快照覆盖会让灯「亮—灭—亮」闪一下
+            if (ShouldHold(point.Point, snapshot.Di(point.Point)))
+            {
+                continue;
+            }
+
             point.Apply(snapshot.DiStates, null);
         }
 
         foreach (var point in DoPoints)
         {
+            if (ShouldHold(point.Point, snapshot.Do(point.Point)))
+            {
+                continue;
+            }
+
             point.Apply(snapshot.DoStates, snapshot.ForcedPoints);
         }
     }
 
-    partial void OnCanForceOutputChanged(bool value) => ForceWriteCommand.NotifyCanExecuteChanged();
+    /// <summary>登记一次本地写入，随后最多 2 秒内不被旧快照覆盖。</summary>
+    /// <param name="point">点位名。</param>
+    /// <param name="value">刚写入的状态。</param>
+    private void MarkPending(string point, bool value)
+    {
+        lock (_pendingSync)
+        {
+            _pendingStates[point] = new PendingState(value, Environment.TickCount64 + PendingHoldMs);
+        }
+    }
+
+    /// <summary>
+    /// 判断某个点位是否还应该保持本地显示。快照已追上目标值（或等待超时）时解除并返回
+    /// <see langword="false"/>，交回快照驱动。
+    /// </summary>
+    /// <param name="point">点位名。</param>
+    /// <param name="snapshotValue">当前快照中的值。</param>
+    private bool ShouldHold(string point, bool snapshotValue)
+    {
+        lock (_pendingSync)
+        {
+            if (!_pendingStates.TryGetValue(point, out var pending))
+            {
+                return false;
+            }
+
+            if (snapshotValue == pending.Value || Environment.TickCount64 > pending.ExpireTick)
+            {
+                _pendingStates.Remove(point);
+                return false;
+            }
+
+            return true;
+        }
+    }
+
+    partial void OnCanForceOutputChanged(bool value)
+    {
+        ForceWriteCommand.NotifyCanExecuteChanged();
+        SimulateDiOnCommand.NotifyCanExecuteChanged();
+        SimulateDiOffCommand.NotifyCanExecuteChanged();
+    }
 
     partial void OnSelectedDoPointChanged(IoPointViewModel? value) => ForceWriteCommand.NotifyCanExecuteChanged();
+
+    partial void OnSelectedDiPointChanged(IoPointViewModel? value)
+    {
+        SimulateDiOnCommand.NotifyCanExecuteChanged();
+        SimulateDiOffCommand.NotifyCanExecuteChanged();
+    }
 }

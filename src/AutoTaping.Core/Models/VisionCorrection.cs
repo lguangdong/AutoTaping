@@ -49,4 +49,19 @@ public sealed class VisionCorrection
 
     /// <summary>失败时的可读说明；成功时为 <see langword="null"/>。</summary>
     public string? ErrorDetail { get; init; }
+
+    /// <summary>MARK1 在图像中的中心 X（像素）；未识别到时为 0。</summary>
+    public double Mark1X { get; init; }
+
+    /// <summary>MARK1 在图像中的中心 Y（像素）；未识别到时为 0。</summary>
+    public double Mark1Y { get; init; }
+
+    /// <summary>MARK2 在图像中的中心 X（像素）；未识别到时为 0。</summary>
+    public double Mark2X { get; init; }
+
+    /// <summary>MARK2 在图像中的中心 Y（像素）；未识别到时为 0。</summary>
+    public double Mark2Y { get; init; }
+
+    /// <summary>本次拍照识别耗时（ms）。</summary>
+    public int ElapsedMs { get; init; }
 }
