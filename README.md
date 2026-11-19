@@ -4,9 +4,81 @@ Windows 设备级上位机：视觉定位 + 四轴运动调度 + 贴附流程 + 
 .NET 8 + WPF + CommunityToolkit.Mvvm + SQLite（Dapper）+ OpenCvSharp；**单机部署，断网可完整运行**。
 
 > 设计规格以 `docs/` 下 13 份文档为唯一权威（建议先读 `docs/README.md`）。
-> 本文件只讲**怎么装、怎么跑、出问题怎么查**。
+> 本文件讲**怎么装、怎么跑、界面长什么样、出问题怎么查**。
 
 ---
+
+## 0. 界面导览
+
+截图由脚本自动生成。
+
+### 0.1 登录框
+
+先登录再进主界面；无操作 5 分钟自动回登录框。
+
+![登录](docs/images/01-login.png)
+
+### 0.2 自动运行（主画面）
+
+未回零时顶部黄条提示；四宫格分别是流程、视觉、运动、统计。
+
+![未就绪](docs/images/02-auto-idle.png)
+
+![运行中](docs/images/03-auto-running.png)
+运行中：状态灯转绿，顶部显示当前步骤（示例 6/12 MoveToPickPos）。
+视觉区给出 ΔX/ΔY/Δθ 与两个 MARK 的匹配分；统计区是本班产量、节拍、UPH、停机。
+
+### 0.3 手动调试
+
+进入需二次确认；可点动、回零、定位。
+
+![手动](docs/images/04-manual.png)
+
+### 0.4 参数配方
+
+36 项参数分 4 组，带范围校验与变更记录。
+
+![配方](docs/images/05-recipe.png)
+
+### 0.5 视觉标定
+
+拍照识别与九点标定两个页签，可现场做 MARK 模板。
+
+![视觉](docs/images/06-vision.png)
+
+### 0.6 报 警
+
+当前未确认报警 + 历史查询/导出；截图是触发急停后的 AL100。
+
+![报警](docs/images/07-alarm.png)
+
+### 0.7 产量统计
+
+总产量/良率/节拍/按小时柱状图/停机分析/逐件明细（含 ΔX ΔY）。
+
+![产量](docs/images/08-output.png)
+
+### 0.8 IO 监控
+
+DI/DO 200ms 刷新；虚拟模式下可手动模拟输入（X00 放行载具）。
+
+![IO](docs/images/09-io.png)
+
+### 0.9 系统设置
+
+用户管理、一键备份、自检、操作日志与版本信息。
+
+![系统](docs/images/10-system.png)
+
+### 0.10 截图怎么来的
+
+`tools/capture-screenshots.ps1` 会启动程序、登录、逐页截图。
+
+用 UIAutomation 点按钮，靠虚拟 IO 模拟载具到位跑通整套流程后再取图。
+
+```powershell
+powershell -File tools\capture-screenshots.ps1
+```
 
 ## 1. 解决方案结构
 
@@ -21,6 +93,7 @@ AutoTaping/
 │   ├── AutoTaping.Vision/     # 标定、模板匹配、纠偏
 │   ├── AutoTaping.Data/       # SQLite + Dapper：表结构、仓储、备份、每日维护
 │   └── AutoTaping.Tests/      # xUnit 单元测试
+├── tools/                     # 相机冒烟测试、截图脚本、样本图生成
 ├── packages-local/            # 离线 NuGet 包（无外网时用）
 └── NuGet.config               # 指向本地包源
 ```
@@ -161,10 +234,11 @@ dotnet publish src/AutoTaping.App -c Release -r win-x64 --self-contained true -o
 - 编码红线见 `docs/10-编码约定与AI须知.md`（分层、异步、日志、测试要求）。
 - 分阶段交付物与验收标准见 `docs/11-开发任务分解.md`。
 - S9 的交付物清单、验收自检结论与压测报告见 `docs/12-S9-验收与压测报告.md`。
+- 已知偶发：`AutoFlowCoordinatorTests` 全流程用例在全量并行跑时偶尔超时，重跑即过。
 
 ```powershell
 dotnet build AutoTaping.sln        # 期望 0 error
-dotnet test src/AutoTaping.Tests   # 期望全部通过（当前 154 个用例）
+dotnet test src/AutoTaping.Tests   # 期望全部通过（当前 165 个用例）
 ```
 
 ---

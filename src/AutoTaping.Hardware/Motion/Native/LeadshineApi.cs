@@ -41,9 +41,12 @@ internal static class LeadshineApi
     [DllImport(Dll)] internal static extern ushort dmc_get_home_result(ushort card, ushort axis, out ushort stopFlag);
 
     // ---------- 限位信号逻辑 ----------
-
-    [DllImport(Dll)] internal static extern ushort dmc_set_elogic(ushort card, ushort axis, ushort elogic);
-    [DllImport(Dll)] internal static extern ushort dmc_set_einlogic(ushort card, ushort axis, ushort einlogic);
+    // 注意：老手册里的 dmc_set_elogic / dmc_set_einlogic 在 2024 版函数库（LTDMC 2.4.6.4）中已不存在，
+    // 限位使能/电平/制动方式合并为 dmc_set_el_mode(card, axis, el_enable, el_logic, el_mode)。
+    // 本项目目前不在代码里改限位逻辑（限位类型在 Motion 调试软件里配置），需要时再按下面签名声明：
+    //   el_enable: 0 禁止正负 / 1 允许正负 / 2 禁止正+允许负 / 3 允许正+禁止负
+    //   el_logic : 0 正负低有效 / 1 正负高有效 / 2 正低负高 / 3 正高负低
+    //   el_mode  : 0 立即停 / 1 减速停 / 2 正立即+负减速 / 3 正减速+负立即
 
     // ---------- 运动 ----------
 
@@ -75,6 +78,8 @@ internal static class LeadshineApi
     [DllImport(Dll)] internal static extern ushort dmc_read_inport(ushort card, ushort portNo);
     [DllImport(Dll)] internal static extern ushort dmc_read_outport(ushort card, ushort portNo);
     [DllImport(Dll)] internal static extern ushort dmc_write_outport(ushort card, ushort portNo, ushort value);
-    [DllImport(Dll)] internal static extern ushort dmc_set_doelogic(ushort card, ushort bitNo, ushort logic);
-    [DllImport(Dll)] internal static extern ushort dmc_set_inbit_filter(ushort card, ushort bitNo, ushort filterMs);
+
+    // 同样已从 2024 版函数库移除：dmc_set_doelogic / dmc_set_inbit_filter。
+    // 新版本用 dmc_set_input_filter(card, bitNo, filterMs) 设置输入滤波；
+    // 输出的有效电平等逻辑改由「输出信号逻辑」配置（Motion 软件里配），代码里暂不需要。
 }
