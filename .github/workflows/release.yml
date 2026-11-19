@@ -18,10 +18,10 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore AutoTaping.sln -s https://api.nuget.org/v3/index.json
+        run: dotnet restore AutoTaping.sln -r win-x64 -s https://api.nuget.org/v3/index.json
 
       - name: Publish
-        run: dotnet publish src/AutoTaping.App -c Release -r win-x64 --self-contained true -o publish --no-restore
+        run: dotnet publish src/AutoTaping.App -c Release -r win-x64 --self-contained true -o publish
 
       - name: Package
         shell: pwsh
