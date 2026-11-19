@@ -80,6 +80,16 @@ DI/DO 200ms 刷新；虚拟模式下可手动模拟输入（X00 放行载具）�
 powershell -File tools\capture-screenshots.ps1
 ```
 
+### 0.11 设备三维示意图
+
+独立的单文件网页，讲解产线形态与 10 步流程。离线也能开。
+
+![设备三维示意图](docs/images/11-layout-3d.png)
+
+- 本地：双击 `docs/设备三维示意图-产线版.html`（无外网依赖）
+- 源码：<docs/设备三维示意图-产线版.html>
+- 在线预览：<https://htmlpreview.github.io/?https://github.com/lguangdong/AutoTaping/blob/master/docs/%E8%AE%BE%E5%A4%87%E4%B8%89%E7%BB%B4%E7%A4%BA%E6%84%8F%E5%9B%BE-%E4%BA%A7%E7%BA%BF%E7%89%88.html>
+
 ## 1. 解决方案结构
 
 ```
